@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/templates/rid_owner.h"
+#include "core/templates/vector.h"
 #include "servers/rendering/rendering_server_enums.h"
 
 class RendererCameraAttributes {
@@ -56,6 +57,8 @@ private:
 		float dof_blur_near_distance = 2;
 		float dof_blur_near_transition = 1;
 		float dof_blur_amount = 0.1;
+		Vector<float> dof_responses;
+		bool dof_responses_uses_dof = false;
 	};
 
 	RSE::DOFBlurQuality dof_blur_quality = RSE::DOF_BLUR_QUALITY_MEDIUM;
@@ -82,6 +85,8 @@ public:
 	void camera_attributes_set_dof_blur_bokeh_shape(RSE::DOFBokehShape p_shape);
 
 	void camera_attributes_set_dof_blur(RID p_camera_attributes, bool p_far_enable, float p_far_distance, float p_far_transition, bool p_near_enable, float p_near_distance, float p_near_transition, float p_amount);
+	void camera_attributes_set_dof_responses(RID p_camera_attributes, const Vector<float> &p_responses);
+	Vector<float> camera_attributes_get_dof_responses(RID p_camera_attributes) const;
 	bool camera_attributes_get_dof_far_enabled(RID p_camera_attributes);
 	float camera_attributes_get_dof_far_distance(RID p_camera_attributes);
 	float camera_attributes_get_dof_far_transition(RID p_camera_attributes);
@@ -93,7 +98,13 @@ public:
 	_FORCE_INLINE_ bool camera_attributes_uses_dof(RID p_camera_attributes) {
 		CameraAttributes *cam_attributes = camera_attributes_owner.get_or_null(p_camera_attributes);
 
-		return cam_attributes && (cam_attributes->dof_blur_near_enabled || cam_attributes->dof_blur_far_enabled) && cam_attributes->dof_blur_amount > 0.0;
+		if (!cam_attributes) {
+			return false;
+		}
+		if (!cam_attributes->dof_responses.is_empty()) {
+			return cam_attributes->dof_responses_uses_dof;
+		}
+		return (cam_attributes->dof_blur_near_enabled || cam_attributes->dof_blur_far_enabled) && cam_attributes->dof_blur_amount > 0.0;
 	}
 
 	void camera_attributes_set_exposure(RID p_camera_attributes, float p_multiplier, float p_exposure_normalization);

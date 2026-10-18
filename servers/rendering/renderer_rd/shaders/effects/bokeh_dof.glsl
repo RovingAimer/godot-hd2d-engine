@@ -11,6 +11,10 @@ layout(local_size_x = BLOCK_SIZE, local_size_y = BLOCK_SIZE, local_size_z = 1) i
 #ifdef MODE_GEN_BLUR_SIZE
 layout(rgba16f, set = 0, binding = 0) uniform restrict image2D color_image;
 layout(set = 1, binding = 0) uniform sampler2D source_depth;
+// Native response endpoints: two vec4-sized groups (eight contiguous floats).
+layout(set = 2, binding = 0, std430) restrict readonly buffer DofResponses {
+	float values[];
+} dof_responses;
 #endif
 
 #if defined(MODE_BOKEH_BOX) || defined(MODE_BOKEH_HEXAGONAL) || defined(MODE_BOKEH_CIRCULAR)
@@ -21,13 +25,17 @@ layout(rgba16f, set = 0, binding = 0) uniform restrict writeonly image2D bokeh_i
 #ifdef MODE_COMPOSITE_BOKEH
 layout(rgba16f, set = 0, binding = 0) uniform restrict image2D color_image;
 layout(set = 1, binding = 0) uniform sampler2D source_bokeh;
+layout(set = 2, binding = 0) uniform sampler2D source_depth;
+layout(set = 3, binding = 0, std430) restrict readonly buffer DofResponses {
+	float values[];
+} dof_responses;
 #endif
 
 // based on https://www.shadertoy.com/view/Xd3GDl
 
 #include "bokeh_dof_inc.glsl"
 
-#ifdef MODE_GEN_BLUR_SIZE
+#if defined(MODE_GEN_BLUR_SIZE) || defined(MODE_COMPOSITE_BOKEH)
 
 float get_depth_at_pos(vec2 uv) {
 	float depth = textureLod(source_depth, uv, 0.0).x * 2.0 - 1.0;
@@ -39,7 +47,38 @@ float get_depth_at_pos(vec2 uv) {
 	return depth;
 }
 
+float endpoint_blur_size(float depth, uint offset) {
+	float near_begin = dof_responses.values[offset + 4u];
+	float far_begin = dof_responses.values[offset + 1u];
+	float radius = dof_responses.values[offset + 6u] * 64.0;
+	if (dof_responses.values[offset + 3u] > 0.5 && depth < near_begin) {
+		float transition = dof_responses.values[offset + 5u];
+		if (transition < 0.0) {
+			float d = abs(near_begin - depth);
+			return -(d / (near_begin - d)) * radius - DEPTH_GAP;
+		}
+		return -(1.0 - smoothstep(near_begin - transition, near_begin, depth)) * radius - DEPTH_GAP;
+	}
+	if (dof_responses.values[offset] > 0.5 && depth > far_begin) {
+		float transition = dof_responses.values[offset + 2u];
+		if (transition < 0.0) {
+			float d = abs(far_begin - depth);
+			return (d / (far_begin + d)) * radius + DEPTH_GAP;
+		}
+		return smoothstep(far_begin, far_begin + transition, depth) * radius + DEPTH_GAP;
+	}
+	return 0.0;
+}
+
 float get_blur_size(float depth) {
+	if (params.response_count > 0u) {
+		float radius = 0.0;
+		for (uint i = 0u; i < params.response_count; i++) {
+			uint offset = i * 8u;
+			radius += endpoint_blur_size(depth, offset) * dof_responses.values[offset + 7u];
+		}
+		return radius;
+	}
 	if (params.blur_near_active && depth < params.blur_near_begin) {
 		if (params.use_physical_near) {
 			// Physically-based.
@@ -72,16 +111,18 @@ float get_blur_size(float depth) {
 vec4 weighted_filter_dir(vec2 dir, vec2 uv, vec2 pixel_size) {
 	dir *= pixel_size;
 	vec4 color = texture(color_texture, uv);
-
 	vec4 accum = color;
 	float total = 1.0;
-
+	bool reconstruct_far = color.a > 0.0;
+	vec3 far_rgb = color.rgb;
+	float far_weight = 1.0;
+	vec3 near_rgb = vec3(0.0);
+	float near_weight = 0.0;
 	float blur_scale = params.blur_size / float(params.blur_steps);
 
 	if (params.use_jitter) {
 		uv += dir * (hash12n(uv + params.jitter_seed) - 0.5);
 	}
-
 	for (int i = -params.blur_steps; i <= params.blur_steps; i++) {
 		if (i == 0) {
 			continue;
@@ -89,26 +130,48 @@ vec4 weighted_filter_dir(vec2 dir, vec2 uv, vec2 pixel_size) {
 		float radius = float(i) * blur_scale;
 		vec2 suv = uv + dir * radius;
 		radius = abs(radius);
-
 		vec4 sample_color = texture(color_texture, suv);
-		float limit;
-
-		if (sample_color.a < color.a) {
-			limit = abs(sample_color.a);
-		} else {
-			limit = abs(color.a);
-		}
-
-		limit -= DEPTH_GAP;
-
+		float limit = (sample_color.a < color.a ? abs(sample_color.a) : abs(color.a)) - DEPTH_GAP;
 		float m = smoothstep(radius - 0.5, radius + 0.5, limit);
-
+		// Preserve the signed CoC propagation and non-far-center behavior.
 		accum += mix(color, sample_color, m);
-
+		if (reconstruct_far) {
+			if (sample_color.a < 0.0) {
+				near_rgb += sample_color.rgb * m;
+				near_weight += m;
+			} else {
+				// Interpolating clear/far RGB before testing CoC admits sharp color.
+				// Gather only alpha first; fetch RGB corners only at that boundary.
+				vec4 alpha = textureGather(color_texture, suv, 3);
+				float minimum = min(min(alpha.x, alpha.y), min(alpha.z, alpha.w));
+				float maximum = max(max(alpha.x, alpha.y), max(alpha.z, alpha.w));
+				if (minimum == 0.0 && maximum > 0.0) {
+					ivec2 source_size = textureSize(color_texture, 0);
+					vec2 sample_pos = suv * vec2(source_size) - 0.5;
+					ivec2 base = ivec2(floor(sample_pos));
+					vec2 fraction = fract(sample_pos);
+					for (int j = 0; j < 4; j++) {
+						vec4 corner = texelFetch(color_texture, clamp(base + ivec2(j & 1, j >> 1), ivec2(0), source_size - 1), 0);
+						float b = ((j & 1) == 0 ? 1.0 - fraction.x : fraction.x) * ((j >> 1) == 0 ? 1.0 - fraction.y : fraction.y);
+						float corner_m = smoothstep(radius - 0.5, radius + 0.5, min(color.a, corner.a) - DEPTH_GAP);
+						far_rgb += corner.rgb * (b * corner_m);
+						far_weight += b * corner_m;
+					}
+				} else {
+					far_rgb += sample_color.rgb * m;
+					far_weight += m;
+				}
+			}
+		}
 		total += 1.0;
 	}
-
-	return accum / total;
+	vec4 result = accum / total;
+	if (reconstruct_far) {
+		// Normalize far reconstruction, retaining near foreground coverage m/N.
+		// The center contributes one, so far_weight is always positive.
+		result.rgb = (1.0 - near_weight / total) * (far_rgb / far_weight) + near_rgb / total;
+	}
+	return result;
 }
 
 #endif
@@ -214,6 +277,51 @@ void main() {
 	uv += pixel_size * 0.5;
 	vec4 color = imageLoad(color_image, pos);
 	vec4 bokeh = texture(source_bokeh, uv);
+	if (color.a > 0.0) {
+		ivec2 low_size = textureSize(source_bokeh, 0);
+		ivec2 full_size = textureSize(source_depth, 0);
+		vec2 low_pos = uv * vec2(low_size) - 0.5;
+		ivec2 low_base = ivec2(floor(low_pos));
+		vec2 blend = fract(low_pos);
+		float center_reverse_depth = texelFetch(source_depth, pos, 0).r;
+		vec3 near_rgb = vec3(0.0);
+		float near_weight = 0.0;
+		vec3 far_rgb = vec3(0.0);
+		float far_weight = 0.0;
+		bool rejected_clear = false;
+		for (int y = 0; y < 2; y++) {
+			for (int x = 0; x < 2; x++) {
+				ivec2 tap_pos = clamp(low_base + ivec2(x, y), ivec2(0), low_size - 1);
+				vec4 tap = texelFetch(source_bokeh, tap_pos, 0);
+				float w = (x == 0 ? 1.0 - blend.x : blend.x) * (y == 0 ? 1.0 - blend.y : blend.y);
+				// Match pass1's normalized (tap + 0.25) / half_size, including odd sizes.
+				ivec2 source_pos = clamp(ivec2(floor((vec2(tap_pos) + 0.25) * vec2(full_size) / vec2(low_size))), ivec2(0), full_size - 1);
+				float reverse_depth = texelFetch(source_depth, source_pos, 0).r;
+				float depth = reverse_depth * 2.0 - 1.0;
+				if (params.orthogonal) {
+					depth = -(depth * (params.z_far - params.z_near) - (params.z_far + params.z_near)) / 2.0;
+				} else {
+					depth = 2.0 * params.z_near * params.z_far / (params.z_far + params.z_near + depth * (params.z_far - params.z_near));
+				}
+				float raw_coc = get_blur_size(depth);
+				if (tap.a < 0.0 || raw_coc < 0.0) {
+					// Keep near contributions at their original bilinear coverage.
+					near_rgb += w * tap.rgb;
+					near_weight += w;
+				} else if (!(raw_coc == 0.0 && reverse_depth > center_reverse_depth)) {
+					// Reject only a closer, exactly clear-zone source, never a depth gradient.
+					far_rgb += w * tap.rgb;
+					far_weight += w;
+				} else if (w > 0.0) {
+					rejected_clear = true;
+				}
+			}
+		}
+		if (rejected_clear && far_weight > 0.0) {
+			bokeh.rgb = near_rgb + (1.0 - near_weight) * (far_rgb / far_weight);
+		}
+		// Leave old bilinear alpha and composite mix_amount unchanged.
+	}
 
 	float mix_amount;
 	if (bokeh.a < color.a) {

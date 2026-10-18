@@ -30,6 +30,7 @@
 
 #include "bokeh_dof.h"
 
+#include "core/os/os.h"
 #include "servers/rendering/renderer_rd/effects/copy_effects.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
@@ -79,6 +80,9 @@ BokehDOF::BokehDOF(bool p_prefer_raster_effects) {
 }
 
 BokehDOF::~BokehDOF() {
+	if (bokeh.response_buffer.is_valid()) {
+		RD::get_singleton()->free(bokeh.response_buffer);
+	}
 	for (int i = 0; i < BOKEH_MAX; i++) {
 		bokeh.compute_pipelines[i].free();
 	}
@@ -132,6 +136,35 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
 	bokeh.push_constant.orthogonal = p_cam_orthogonal;
 	bokeh.push_constant.blur_size = (dof_near_size < 0.0 && dof_far_size < 0.0) ? 32 : bokeh_size; // Cap with physically-based to keep performance reasonable.
 
+	const Vector<float> responses = RSG::camera_attributes->camera_attributes_get_dof_responses(p_camera_attributes);
+	bokeh.push_constant.response_count = responses.size() / 8;
+	if (!responses.is_empty()) {
+		// Interpolate the existing endpoint sampling support as well as signed CoC.
+		// A single endpoint therefore has exactly the stock native filter radius.
+		float support = 0.0f;
+		for (int i = 0; i < responses.size(); i += 8) {
+			const float endpoint_support = (responses[i + 2] < 0.0f && responses[i + 5] < 0.0f) ? 32.0f : responses[i + 6] * 64.0f;
+			support += responses[i + 7] * endpoint_support;
+		}
+		bokeh.push_constant.blur_size = support;
+	}
+	// One buffer belongs to this effect, not to each camera/frame. Resize to the
+	// actual input so cancelled/reopened sequences do not retain peak allocations.
+	const uint64_t requested_bytes = MAX(uint64_t(responses.size()) * sizeof(float), uint64_t(8 * sizeof(float)));
+	ERR_FAIL_COND_MSG(requested_bytes > UINT32_MAX, "DOF response buffer exceeds the RenderingDevice size limit.");
+	const uint32_t response_bytes = uint32_t(requested_bytes);
+	if (bokeh.response_buffer_bytes != response_bytes) {
+		if (bokeh.response_buffer.is_valid()) {
+			RD::get_singleton()->free(bokeh.response_buffer);
+		}
+		bokeh.response_buffer = RD::get_singleton()->storage_buffer_create(response_bytes);
+		bokeh.response_buffer_bytes = response_bytes;
+	}
+	ERR_FAIL_COND(bokeh.response_buffer.is_null());
+	if (!responses.is_empty()) {
+		RD::get_singleton()->buffer_update(bokeh.response_buffer, 0, response_bytes, responses.ptr());
+	}
+
 	bokeh.push_constant.second_pass = false;
 	bokeh.push_constant.half_size = false;
 
@@ -151,6 +184,11 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
 	RD::Uniform u_half_image0(RD::UNIFORM_TYPE_IMAGE, 0, p_buffers.half_texture[0]);
 	RD::Uniform u_half_image1(RD::UNIFORM_TYPE_IMAGE, 0, p_buffers.half_texture[1]);
 
+	static const bool profile_dof = OS::get_singleton()->get_environment("HD2D_DOF_PROFILE") == "1";
+	if (profile_dof) {
+		RD::get_singleton()->capture_timestamp("<HD2D Native DOF Begin");
+		RD::get_singleton()->capture_timestamp("HD2D GEN CoC");
+	}
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 
 	/* FIRST PASS */
@@ -164,6 +202,8 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
 
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 0, u_base_image), 0);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 1, u_depth_texture), 1);
+	RD::Uniform u_responses(RD::UNIFORM_TYPE_STORAGE_BUFFER, 0, bokeh.response_buffer);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 2, u_responses), 2);
 
 	bokeh.push_constant.size[0] = p_buffers.base_texture_size.x;
 	bokeh.push_constant.size[1] = p_buffers.base_texture_size.y;
@@ -172,6 +212,9 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
 
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_buffers.base_texture_size.x, p_buffers.base_texture_size.y, 1);
 	RD::get_singleton()->compute_list_add_barrier(compute_list);
+	if (profile_dof) {
+		RD::get_singleton()->capture_timestamp(bokeh_shape == RSE::DOF_BOKEH_CIRCLE ? "HD2D Circular Filter" : "HD2D Filter1");
+	}
 
 	if (bokeh_shape == RSE::DOF_BOKEH_BOX || bokeh_shape == RSE::DOF_BOKEH_HEXAGON) {
 		//second pass
@@ -208,6 +251,9 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
 		RD::get_singleton()->compute_list_add_barrier(compute_list);
 
 		//third pass
+		if (profile_dof) {
+			RD::get_singleton()->capture_timestamp("HD2D Filter2");
+		}
 		bokeh.push_constant.second_pass = true;
 
 		if (blur_quality == RSE::DOF_BLUR_QUALITY_VERY_LOW || blur_quality == RSE::DOF_BLUR_QUALITY_LOW) {
@@ -225,6 +271,9 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
 
 		if (blur_quality == RSE::DOF_BLUR_QUALITY_VERY_LOW || blur_quality == RSE::DOF_BLUR_QUALITY_LOW) {
 			//forth pass, upscale for low quality
+			if (profile_dof) {
+				RD::get_singleton()->capture_timestamp("HD2D Native Composite");
+			}
 
 			shader = bokeh.compute_shader.version_get_shader(bokeh.shader_version, BOKEH_COMPOSITE);
 			ERR_FAIL_COND(shader.is_null());
@@ -233,6 +282,8 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
 
 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 0, u_base_image), 0);
 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 1, u_half_texture1), 1);
+			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 2, u_depth_texture), 2);
+			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 3, u_responses), 3);
 
 			bokeh.push_constant.size[0] = p_buffers.base_texture_size.x;
 			bokeh.push_constant.size[1] = p_buffers.base_texture_size.y;
@@ -272,6 +323,9 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
 		RD::get_singleton()->compute_list_add_barrier(compute_list);
 
 		//circle is just one pass, then upscale
+		if (profile_dof) {
+			RD::get_singleton()->capture_timestamp("HD2D Native Composite");
+		}
 
 		// upscale
 
@@ -282,6 +336,8 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
 
 		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 0, u_base_image), 0);
 		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 1, u_half_texture0), 1);
+		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 2, u_depth_texture), 2);
+		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 3, u_responses), 3);
 
 		bokeh.push_constant.size[0] = p_buffers.base_texture_size.x;
 		bokeh.push_constant.size[1] = p_buffers.base_texture_size.y;
@@ -294,10 +350,14 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
 	}
 
 	RD::get_singleton()->compute_list_end();
+	if (profile_dof) {
+		RD::get_singleton()->capture_timestamp("<HD2D Native DOF End");
+	}
 }
 
 void BokehDOF::bokeh_dof_raster(const BokehBuffers &p_buffers, RID p_camera_attributes, float p_cam_znear, float p_cam_zfar, bool p_cam_orthogonal) {
 	ERR_FAIL_COND_MSG(!prefer_raster_effects, "Can't blur-based depth of field with the clustered renderer.");
+	ERR_FAIL_COND_MSG(!RSG::camera_attributes->camera_attributes_get_dof_responses(p_camera_attributes).is_empty(), "DOF response blending is unavailable in the Mobile raster DOF path.");
 
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);

@@ -30,9 +30,8 @@
 
 #include "camera_attributes_storage.h"
 
-#ifdef DEBUG_ENABLED
+#include "core/math/math_funcs.h"
 #include "core/os/os.h"
-#endif
 
 RendererCameraAttributes *RendererCameraAttributes::singleton = nullptr;
 uint64_t RendererCameraAttributes::auto_exposure_counter = 2;
@@ -83,6 +82,43 @@ void RendererCameraAttributes::camera_attributes_set_dof_blur(RID p_camera_attri
 	cam_attributes->dof_blur_near_transition = p_near_transition;
 
 	cam_attributes->dof_blur_amount = p_amount;
+}
+
+// Each endpoint contains far enabled/distance/transition, near enabled/distance/
+// transition, native blur amount, weight. All distances are metres; negative
+// transition selects the stock physical response. Empty input restores stock DOF.
+void RendererCameraAttributes::camera_attributes_set_dof_responses(RID p_camera_attributes, const Vector<float> &p_responses) {
+	CameraAttributes *cam_attributes = camera_attributes_owner.get_or_null(p_camera_attributes);
+	ERR_FAIL_NULL(cam_attributes);
+	ERR_FAIL_COND_MSG(!p_responses.is_empty() && OS::get_singleton()->get_current_rendering_method() != "forward_plus", "DOF response blending is supported only by the Forward+ renderer.");
+	ERR_FAIL_COND_MSG(p_responses.size() % 8 != 0, "DOF responses must contain eight floats per endpoint.");
+	float total_weight = 0.0f;
+	bool uses_dof = false;
+	for (int i = 0; i < p_responses.size(); i += 8) {
+		for (int j = 0; j < 8; j++) {
+			ERR_FAIL_COND_MSG(!Math::is_finite(p_responses[i + j]), "DOF response parameters must be finite.");
+		}
+		ERR_FAIL_COND_MSG(p_responses[i + 1] <= 0.0f || p_responses[i + 4] <= 0.0f, "DOF endpoint distances must be positive.");
+		ERR_FAIL_COND_MSG(p_responses[i + 2] == 0.0f || p_responses[i + 5] == 0.0f, "DOF transitions must be positive (artistic) or negative (physical).");
+		ERR_FAIL_COND_MSG(p_responses[i + 6] < 0.0f || p_responses[i + 7] < 0.0f, "DOF amount and weight cannot be negative.");
+		total_weight += p_responses[i + 7];
+		uses_dof |= p_responses[i + 7] > 0.0f && p_responses[i + 6] > 0.0f && (p_responses[i] > 0.5f || p_responses[i + 3] > 0.5f);
+	}
+	ERR_FAIL_COND_MSG(!p_responses.is_empty() && (!Math::is_finite(total_weight) || total_weight <= 0.0f), "DOF endpoint weights must have a finite positive sum.");
+	cam_attributes->dof_responses = p_responses;
+	if (!p_responses.is_empty()) {
+		float *data = cam_attributes->dof_responses.ptrw();
+		for (int i = 7; i < p_responses.size(); i += 8) {
+			data[i] /= total_weight;
+		}
+	}
+	cam_attributes->dof_responses_uses_dof = uses_dof;
+}
+
+Vector<float> RendererCameraAttributes::camera_attributes_get_dof_responses(RID p_camera_attributes) const {
+	const CameraAttributes *cam_attributes = camera_attributes_owner.get_or_null(p_camera_attributes);
+	ERR_FAIL_NULL_V(cam_attributes, Vector<float>());
+	return cam_attributes->dof_responses;
 }
 
 bool RendererCameraAttributes::camera_attributes_get_dof_far_enabled(RID p_camera_attributes) {

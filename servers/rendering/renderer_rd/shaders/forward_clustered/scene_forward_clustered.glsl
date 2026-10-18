@@ -1063,6 +1063,9 @@ layout(location = 1) out vec4 specular_buffer; //specular and SSS (subsurface sc
 #else
 
 layout(location = 0) out vec4 frag_color;
+#if defined(MODE_DOF_WORLD_LAYER) && !defined(MODE_SEPARATE_SPECULAR)
+layout(location = 1) out vec4 dof_layer_depth;
+#endif
 #endif // MODE_SEPARATE_SPECULAR
 
 #endif // RENDER DEPTH
@@ -3098,6 +3101,19 @@ void fragment_shader(in SceneData scene_data) {
 #if defined(PREMUL_ALPHA_USED) && !defined(MODE_RENDER_DEPTH)
 	frag_color.rgb *= premul_alpha;
 #endif //PREMUL_ALPHA_USED
+
+#ifdef MODE_DOF_WORLD_LAYER
+	// Straight alpha at the shader output, premultiplied by MRT blend.
+	// Reconstruct geometry depth rather than a material LIGHT_VERTEX override.
+	// Materials writing custom DEPTH are rejected by this layer.
+	vec4 layer_view = inv_projection_matrix * vec4(screen_uv * 2.0 - 1.0, gl_FragCoord.z, 1.0);
+	float layer_depth = -layer_view.z / layer_view.w;
+#ifdef DOF_LAYER_NO_DEPTH_TEST
+	dof_layer_depth = vec4(layer_depth, 1.0, 0.0, alpha);
+#else
+	dof_layer_depth = vec4(layer_depth, 0.0, 0.0, alpha);
+#endif
+#endif
 
 #endif //MODE_SEPARATE_SPECULAR
 

@@ -60,6 +60,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 
 	uses_point_size = false;
 	uses_alpha = false;
+	uses_custom_depth = false;
 	uses_alpha_clip = false;
 	uses_alpha_antialiasing = false;
 	uses_blend_alpha = false;
@@ -123,6 +124,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	actions.render_mode_flags["world_vertex_coords"] = &uses_world_coordinates;
 
 	actions.usage_flag_pointers["ALPHA"] = &uses_alpha;
+	actions.usage_flag_pointers["DEPTH"] = &uses_custom_depth;
 	actions.usage_flag_pointers["ALPHA_SCISSOR_THRESHOLD"] = &uses_alpha_clip;
 	actions.usage_flag_pointers["ALPHA_HASH_SCALE"] = &uses_alpha_clip;
 	actions.usage_flag_pointers["ALPHA_ANTIALIASING_EDGE"] = &uses_alpha_antialiasing;
@@ -319,6 +321,10 @@ uint16_t SceneShaderForwardClustered::ShaderData::_get_shader_version(PipelineVe
 				shader_flags |= SHADER_COLOR_PASS_FLAG_MULTIVIEW;
 			}
 
+			if (p_color_pass_flags & PIPELINE_COLOR_PASS_FLAG_DOF_WORLD_LAYER) {
+				shader_flags |= SHADER_COLOR_PASS_FLAG_DOF_WORLD_LAYER;
+			}
+
 			return ShaderVersion::SHADER_VERSION_COLOR_PASS * 2 + shader_flags;
 		} break;
 		default: {
@@ -478,6 +484,13 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
 			default:
 				break;
 		}
+	}
+
+	if (p_pipeline_key.color_pass_flags & PIPELINE_COLOR_PASS_FLAG_DOF_WORLD_LAYER) {
+		// Both targets use ordinary straight-alpha input. The cleared targets
+		// accumulate premultiplied HDR and coverage-weighted view depth.
+		blend_state.attachments = { blend_attachment, blend_attachment };
+		depth_stencil_state.enable_depth_write = false;
 	}
 
 	// Convert the specialization from the key to pipeline specialization constants.
@@ -662,6 +675,7 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 			"\n#define USE_LIGHTMAP\n", // SHADER_COLOR_PASS_FLAG_LIGHTMAP
 			"\n#define USE_MULTIVIEW\n", // SHADER_COLOR_PASS_FLAG_MULTIVIEW
 			"\n#define MOTION_VECTORS\n", // SHADER_COLOR_PASS_FLAG_MOTION_VECTORS
+			"\n#define MODE_DOF_WORLD_LAYER\n", // SHADER_COLOR_PASS_FLAG_DOF_WORLD_LAYER
 		};
 
 		for (int i = 0; i < SHADER_COLOR_PASS_FLAG_COUNT; i++) {
@@ -684,12 +698,25 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 				group = SHADER_GROUP_MULTIVIEW;
 			}
 
+			if (i & SHADER_COLOR_PASS_FLAG_DOF_WORLD_LAYER) {
+				group = SHADER_GROUP_DOF_WORLD_LAYER;
+			}
+
 			shader_versions.push_back(ShaderRD::VariantDefine(group, version, false));
 		}
 
 		Vector<uint64_t> dynamic_buffers;
 		dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(RenderForwardClustered::RENDER_PASS_UNIFORM_SET, 2));
 		shader.initialize(shader_versions, p_defines, Vector<RD::PipelineImmutableSampler>(), dynamic_buffers);
+		// Keep stable variant indices, but never compile unsupported WORLD pairs.
+		// Only ordinary/lightmap color, each with its ubershader, is reachable.
+		for (int flags = 0; flags < SHADER_COLOR_PASS_FLAG_COUNT; flags++) {
+			const int unsupported = SHADER_COLOR_PASS_FLAG_SEPARATE_SPECULAR | SHADER_COLOR_PASS_FLAG_MULTIVIEW | SHADER_COLOR_PASS_FLAG_MOTION_VECTORS;
+			if ((flags & SHADER_COLOR_PASS_FLAG_DOF_WORLD_LAYER) && (flags & unsupported)) {
+				shader.set_variant_enabled(ShaderVersion::SHADER_VERSION_COLOR_PASS * 2 + flags, false);
+			}
+		}
+
 
 		if (RendererCompositorRD::get_singleton()->is_xr_enabled()) {
 			shader.enable_group(SHADER_GROUP_MULTIVIEW);
@@ -859,6 +886,8 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		actions.usage_defines["POINT_SIZE"] = "#define POINT_SIZE_USED\n";
 		actions.usage_defines["POINT_COORD"] = "#define POINT_COORD_USED\n";
 
+		actions.render_mode_defines["depth_test_disabled"] = "#define DOF_LAYER_NO_DEPTH_TEST\n";
+
 		actions.render_mode_defines["skip_vertex_transform"] = "#define SKIP_TRANSFORM_USED\n";
 		actions.render_mode_defines["world_vertex_coords"] = "#define VERTEX_WORLD_COORDS_USED\n";
 		actions.render_mode_defines["ensure_correct_normals"] = "#define ENSURE_CORRECT_NORMALS\n";
@@ -1017,6 +1046,14 @@ void SceneShaderForwardClustered::set_default_specialization(const ShaderSpecial
 
 	for (SelfList<ShaderData> *E = shader_list.first(); E; E = E->next()) {
 		E->self()->pipeline_hash_map.clear_pipelines();
+	}
+}
+
+void SceneShaderForwardClustered::enable_dof_world_layer_shader_group() {
+	if (!shader.is_group_enabled(SHADER_GROUP_DOF_WORLD_LAYER)) {
+		// The first visible WORLD object prepares this group for existing shader
+		// versions too. This one-time work can hitch; steady-state GPU cost is separate.
+		shader.enable_group(SHADER_GROUP_DOF_WORLD_LAYER);
 	}
 }
 

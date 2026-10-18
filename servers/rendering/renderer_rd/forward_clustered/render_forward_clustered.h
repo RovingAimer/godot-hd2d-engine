@@ -37,6 +37,7 @@
 #include "servers/rendering/renderer_rd/effects/motion_vectors_store.h"
 #include "servers/rendering/renderer_rd/effects/ss_effects.h"
 #include "servers/rendering/renderer_rd/effects/taa.h"
+#include "servers/rendering/renderer_rd/effects/world_dof.h"
 #include "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/best_fit_normal.glsl.gen.h"
@@ -79,6 +80,8 @@ class RenderForwardClustered : public RendererSceneRenderRD {
 		RENDER_LIST_OPAQUE, //used for opaque objects
 		RENDER_LIST_MOTION, //used for opaque objects with motion
 		RENDER_LIST_ALPHA, //used for transparent objects
+		RENDER_LIST_DOF_EXEMPT, //explicit geometry drawn after native DOF
+		RENDER_LIST_DOF_WORLD_LAYER, //soft alpha with independent depth and coverage
 		RENDER_LIST_SECONDARY, //used for shadows and other objects
 		RENDER_LIST_MAX
 	};
@@ -214,6 +217,7 @@ private:
 		COLOR_PASS_FLAG_SEPARATE_SPECULAR = 1 << 1,
 		COLOR_PASS_FLAG_MULTIVIEW = 1 << 2,
 		COLOR_PASS_FLAG_MOTION_VECTORS = 1 << 3,
+		COLOR_PASS_FLAG_DOF_WORLD_LAYER = 1 << 4,
 	};
 
 	struct GeometryInstanceSurfaceDataCache;
@@ -406,7 +410,7 @@ private:
 		uint32_t max_lightmaps;
 		RID lightmap_buffer;
 
-		MultiUmaBuffer<1u> instance_buffer[RENDER_LIST_MAX] = { MultiUmaBuffer<1u>("RENDER_LIST_OPAQUE"), MultiUmaBuffer<1u>("RENDER_LIST_MOTION"), MultiUmaBuffer<1u>("RENDER_LIST_ALPHA"), MultiUmaBuffer<1u>("RENDER_LIST_SECONDARY") };
+		MultiUmaBuffer<1u> instance_buffer[RENDER_LIST_MAX] = { MultiUmaBuffer<1u>("RENDER_LIST_OPAQUE"), MultiUmaBuffer<1u>("RENDER_LIST_MOTION"), MultiUmaBuffer<1u>("RENDER_LIST_ALPHA"), MultiUmaBuffer<1u>("RENDER_LIST_DOF_EXEMPT"), MultiUmaBuffer<1u>("RENDER_LIST_DOF_WORLD_LAYER"), MultiUmaBuffer<1u>("RENDER_LIST_SECONDARY") };
 		InstanceData *curr_gpu_ptr[RENDER_LIST_MAX] = {};
 
 		LightmapCaptureData *lightmap_captures = nullptr;
@@ -737,6 +741,13 @@ private:
 	};
 
 	RenderList render_list[RENDER_LIST_MAX];
+	// Per-render call state, consumed synchronously by the post-DOF hook.
+	RID dof_exempt_uniform_set;
+	RID dof_world_uniform_set;
+	RendererRD::WorldDOF *world_dof = nullptr;
+	bool dof_exempt_reverse_cull = false;
+	SceneShaderForwardClustered::ShaderSpecialization dof_exempt_specialization = {};
+	virtual void _render_buffers_dof_exempt(const RenderDataRD *p_render_data) override;
 
 	virtual void _update_shader_quality_settings() override;
 

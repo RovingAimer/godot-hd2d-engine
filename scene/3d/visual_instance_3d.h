@@ -132,6 +132,8 @@ private:
 	VisibilityRangeFadeMode visibility_range_fade_mode = VISIBILITY_RANGE_FADE_DISABLED;
 
 	float transparency = 0.0f;
+	bool dof_exempt = false;
+	bool dof_world_layer = false;
 
 	float lod_bias = 1.0;
 
@@ -160,6 +162,11 @@ public:
 
 	void set_transparency(float p_transparency);
 	float get_transparency() const;
+
+	void set_dof_exempt(bool p_enabled);
+	void set_dof_world_layer(bool p_enabled);
+	bool is_dof_exempt() const;
+	bool is_dof_world_layer() const;
 
 	void set_visibility_range_begin(float p_dist);
 	float get_visibility_range_begin() const;

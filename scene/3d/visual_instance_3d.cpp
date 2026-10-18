@@ -215,6 +215,32 @@ VisualInstance3D::~VisualInstance3D() {
 	RenderingServer::get_singleton()->free_rid(instance);
 }
 
+void GeometryInstance3D::set_dof_exempt(bool p_enabled) {
+	dof_exempt = p_enabled;
+	RS::get_singleton()->instance_geometry_set_dof_exempt(get_instance(), p_enabled);
+	if (p_enabled && OS::get_singleton()->get_current_rendering_method() != "forward_plus") {
+		ERR_PRINT_ONCE("dof_exempt requires the custom Forward+ renderer. Mobile and Compatibility do not support this feature.");
+	}
+	update_configuration_warnings();
+}
+
+bool GeometryInstance3D::is_dof_exempt() const {
+	return dof_exempt;
+}
+
+void GeometryInstance3D::set_dof_world_layer(bool p_enabled) {
+	dof_world_layer = p_enabled;
+	RS::get_singleton()->instance_geometry_set_dof_world_layer(get_instance(), p_enabled);
+	if (p_enabled && OS::get_singleton()->get_current_rendering_method() != "forward_plus") {
+		ERR_PRINT_ONCE("dof_world_layer requires the custom Forward+ renderer. Mobile and Compatibility do not support this feature.");
+	}
+	update_configuration_warnings();
+}
+
+bool GeometryInstance3D::is_dof_world_layer() const {
+	return dof_world_layer;
+}
+
 void GeometryInstance3D::set_material_override(const Ref<Material> &p_material) {
 	if (material_override.is_valid()) {
 		material_override->disconnect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
@@ -528,6 +554,10 @@ PackedStringArray GeometryInstance3D::get_configuration_warnings() const {
 		warnings.push_back(RTR("The GeometryInstance3D is configured to fade out smoothly over distance, but the fade transition distance is set to 0.\nTo resolve this, increase Visibility Range End Margin above 0."));
 	}
 
+	if ((dof_exempt || dof_world_layer) && OS::get_singleton()->get_current_rendering_method() != "forward_plus") {
+		warnings.push_back(RTR("DOF exemption requires the custom Forward+ renderer."));
+	}
+
 	if (!Math::is_zero_approx(transparency) && OS::get_singleton()->get_current_rendering_method() != "forward_plus") {
 		warnings.push_back(RTR("GeometryInstance3D transparency is only available when using the Forward+ renderer."));
 	}
@@ -560,6 +590,10 @@ void GeometryInstance3D::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_transparency", "transparency"), &GeometryInstance3D::set_transparency);
 	ClassDB::bind_method(D_METHOD("get_transparency"), &GeometryInstance3D::get_transparency);
+	ClassDB::bind_method(D_METHOD("set_dof_exempt", "enabled"), &GeometryInstance3D::set_dof_exempt);
+	ClassDB::bind_method(D_METHOD("set_dof_world_layer", "enabled"), &GeometryInstance3D::set_dof_world_layer);
+	ClassDB::bind_method(D_METHOD("is_dof_exempt"), &GeometryInstance3D::is_dof_exempt);
+	ClassDB::bind_method(D_METHOD("is_dof_world_layer"), &GeometryInstance3D::is_dof_world_layer);
 
 	ClassDB::bind_method(D_METHOD("set_visibility_range_end_margin", "distance"), &GeometryInstance3D::set_visibility_range_end_margin);
 	ClassDB::bind_method(D_METHOD("get_visibility_range_end_margin"), &GeometryInstance3D::get_visibility_range_end_margin);
@@ -605,6 +639,8 @@ void GeometryInstance3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material_override", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial", PROPERTY_USAGE_DEFAULT), "set_material_override", "get_material_override");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material_overlay", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial", PROPERTY_USAGE_DEFAULT), "set_material_overlay", "get_material_overlay");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "transparency", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), "set_transparency", "get_transparency");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "dof_exempt"), "set_dof_exempt", "is_dof_exempt");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "dof_world_layer"), "set_dof_world_layer", "is_dof_world_layer");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "cast_shadow", PROPERTY_HINT_ENUM, "Off,On,Double-Sided,Shadows Only"), "set_cast_shadows_setting", "get_cast_shadows_setting");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "extra_cull_margin", PROPERTY_HINT_RANGE, "0,16384,0.01,suffix:m"), "set_extra_cull_margin", "get_extra_cull_margin");
 	ADD_PROPERTY(PropertyInfo(Variant::AABB, "custom_aabb", PROPERTY_HINT_NONE, "suffix:m"), "set_custom_aabb", "get_custom_aabb");

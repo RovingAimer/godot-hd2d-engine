@@ -913,6 +913,7 @@ public:
 	FUNC1(camera_attributes_set_dof_blur_bokeh_shape, RSE::DOFBokehShape)
 
 	FUNC8(camera_attributes_set_dof_blur, RID, bool, float, float, bool, float, float, float)
+	FUNC2(camera_attributes_set_dof_responses, RID, const Vector<float> &)
 	FUNC3(camera_attributes_set_exposure, RID, float, float)
 	FUNC6(camera_attributes_set_auto_exposure, RID, bool, float, float, float, float)
 
@@ -969,6 +970,8 @@ public:
 	FUNC4(instance_geometry_set_lightmap, RID, RID, const Rect2 &, int)
 	FUNC2(instance_geometry_set_lod_bias, RID, float)
 	FUNC2(instance_geometry_set_transparency, RID, float)
+	FUNC2(instance_geometry_set_dof_exempt, RID, bool)
+	FUNC2(instance_geometry_set_dof_world_layer, RID, bool)
 	FUNC3(instance_geometry_set_shader_parameter, RID, const StringName &, const Variant &)
 	FUNC2RC(Variant, instance_geometry_get_shader_parameter, RID, const StringName &)
 	FUNC2RC(Variant, instance_geometry_get_shader_parameter_default_value, RID, const StringName &)

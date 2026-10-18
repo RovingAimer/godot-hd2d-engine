@@ -3187,6 +3187,7 @@ void RenderingServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("camera_attributes_set_dof_blur_bokeh_shape", "shape"), &RenderingServer::camera_attributes_set_dof_blur_bokeh_shape);
 
 	ClassDB::bind_method(D_METHOD("camera_attributes_set_dof_blur", "camera_attributes", "far_enable", "far_distance", "far_transition", "near_enable", "near_distance", "near_transition", "amount"), &RenderingServer::camera_attributes_set_dof_blur);
+	ClassDB::bind_method(D_METHOD("camera_attributes_set_dof_responses", "camera_attributes", "responses"), &RenderingServer::camera_attributes_set_dof_responses);
 	ClassDB::bind_method(D_METHOD("camera_attributes_set_exposure", "camera_attributes", "multiplier", "normalization"), &RenderingServer::camera_attributes_set_exposure);
 	ClassDB::bind_method(D_METHOD("camera_attributes_set_auto_exposure", "camera_attributes", "enable", "min_sensitivity", "max_sensitivity", "speed", "scale"), &RenderingServer::camera_attributes_set_auto_exposure);
 
@@ -3221,6 +3222,8 @@ void RenderingServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("instance_set_surface_override_material", "instance", "surface", "material"), &RenderingServer::instance_set_surface_override_material);
 	ClassDB::bind_method(D_METHOD("instance_set_visible", "instance", "visible"), &RenderingServer::instance_set_visible);
 	ClassDB::bind_method(D_METHOD("instance_geometry_set_transparency", "instance", "transparency"), &RenderingServer::instance_geometry_set_transparency);
+	ClassDB::bind_method(D_METHOD("instance_geometry_set_dof_exempt", "instance", "enabled"), &RenderingServer::instance_geometry_set_dof_exempt);
+	ClassDB::bind_method(D_METHOD("instance_geometry_set_dof_world_layer", "instance", "enabled"), &RenderingServer::instance_geometry_set_dof_world_layer);
 
 	ClassDB::bind_method(D_METHOD("instance_teleport", "instance"), &RenderingServer::instance_teleport);
 

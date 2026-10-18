@@ -48,6 +48,7 @@ public:
 		SHADER_GROUP_ADVANCED,
 		SHADER_GROUP_MULTIVIEW,
 		SHADER_GROUP_ADVANCED_MULTIVIEW,
+		SHADER_GROUP_DOF_WORLD_LAYER, // Prepared only when opt-in world alpha is visible.
 	};
 
 	// Not an enum because these values are constants that are processed as numbers
@@ -71,7 +72,8 @@ public:
 		SHADER_COLOR_PASS_FLAG_LIGHTMAP = 1 << 2,
 		SHADER_COLOR_PASS_FLAG_MULTIVIEW = 1 << 3,
 		SHADER_COLOR_PASS_FLAG_MOTION_VECTORS = 1 << 4,
-		SHADER_COLOR_PASS_FLAG_COUNT = 1 << 5
+		SHADER_COLOR_PASS_FLAG_DOF_WORLD_LAYER = 1 << 5,
+		SHADER_COLOR_PASS_FLAG_COUNT = 1 << 6
 	};
 
 	enum PipelineVersion {
@@ -94,7 +96,8 @@ public:
 		PIPELINE_COLOR_PASS_FLAG_LIGHTMAP = 1 << 2,
 		PIPELINE_COLOR_PASS_FLAG_MULTIVIEW = 1 << 3,
 		PIPELINE_COLOR_PASS_FLAG_MOTION_VECTORS = 1 << 4,
-		PIPELINE_COLOR_PASS_FLAG_OPTIONS = 5,
+		PIPELINE_COLOR_PASS_FLAG_DOF_WORLD_LAYER = 1 << 5,
+		PIPELINE_COLOR_PASS_FLAG_OPTIONS = 6,
 		PIPELINE_COLOR_PASS_FLAG_COMBINATIONS = 1 << PIPELINE_COLOR_PASS_FLAG_OPTIONS,
 	};
 
@@ -240,6 +243,7 @@ public:
 
 		bool uses_point_size = false;
 		bool uses_alpha = false;
+		bool uses_custom_depth = false;
 		bool uses_blend_alpha = false;
 		bool uses_alpha_clip = false;
 		bool uses_alpha_antialiasing = false;
@@ -380,6 +384,7 @@ public:
 
 	void init(const String p_defines);
 	void set_default_specialization(const ShaderSpecialization &p_specialization);
+	void enable_dof_world_layer_shader_group();
 	void enable_multiview_shader_group();
 	void enable_advanced_shader_group(bool p_needs_multiview = false);
 	bool is_multiview_shader_group_enabled() const;

@@ -31,6 +31,7 @@
 #include "render_forward_clustered.h"
 
 #include "core/config/project_settings.h"
+#include "core/os/os.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
@@ -456,6 +457,10 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 					pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_MULTIVIEW;
 				}
 
+				if constexpr ((p_color_pass_flags & COLOR_PASS_FLAG_DOF_WORLD_LAYER) != 0) {
+					pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_DOF_WORLD_LAYER;
+				}
+
 				pipeline_key.version = SceneShaderForwardClustered::PIPELINE_VERSION_COLOR_PASS;
 			} break;
 			case PASS_MODE_SHADOW:
@@ -636,6 +641,7 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
 			switch (p_params->color_pass_flags) {
 				VALID_FLAG_COMBINATION(0);
 				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT);
+				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_DOF_WORLD_LAYER);
 				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW);
 				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MOTION_VECTORS);
 				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_SEPARATE_SPECULAR);
@@ -677,6 +683,66 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
 			// Unknown pass mode.
 		} break;
 	}
+}
+
+
+void RenderForwardClustered::_render_buffers_dof_exempt(const RenderDataRD *p_render_data) {
+	RenderList &list = render_list[RENDER_LIST_DOF_EXEMPT];
+	RenderList &world_list = render_list[RENDER_LIST_DOF_WORLD_LAYER];
+	if (world_list.elements.is_empty() && p_render_data->render_buffers.is_valid() && p_render_data->render_buffers->has_texture(SNAME("WorldDOF"), SNAME("color"))) {
+		p_render_data->render_buffers->clear_context(SNAME("WorldDOF"));
+	}
+	if (list.elements.is_empty() && world_list.elements.is_empty()) {
+		return; // No pass, allocation or GPU work when no visible object opts in.
+	}
+	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
+	ERR_FAIL_COND(rb.is_null());
+	ERR_FAIL_COND_MSG(rb->get_view_count() != 1, "dof_exempt currently supports a single Forward+ view only. Protected geometry is omitted.");
+	ERR_FAIL_COND_MSG(rb->get_msaa_3d() != RSE::VIEWPORT_MSAA_DISABLED, "dof_exempt currently requires MSAA disabled: resolved R32 scene depth is not a depth attachment. Protected geometry is omitted.");
+	ERR_FAIL_COND_MSG(rb->get_use_taa(), "dof_exempt currently requires TAA disabled to avoid jitter mismatch. Protected geometry is omitted.");
+	ERR_FAIL_COND_MSG(rb->get_scaling_3d_mode() == RSE::VIEWPORT_SCALING_3D_MODE_FSR2 || rb->get_scaling_3d_mode() == RSE::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL, "dof_exempt does not yet support temporal upscalers. Protected geometry is omitted.");
+	if (!world_list.elements.is_empty()) {
+		ERR_FAIL_COND_MSG(!dof_world_uniform_set.is_valid(), "dof_world_layer render state is unavailable.");
+		ERR_FAIL_COND_MSG(rb->get_base_data_format() != RD::DATA_FORMAT_R16G16B16A16_SFLOAT, "dof_world_layer requires RGBA16F HDR scene color.");
+		if (!world_dof) {
+			world_dof = memnew(RendererRD::WorldDOF);
+		}
+		scene_shader.enable_dof_world_layer_shader_group();
+		world_dof->ensure_buffers(rb);
+		RID color = rb->get_texture(SNAME("WorldDOF"), SNAME("color"));
+		RID metadata = rb->get_texture(SNAME("WorldDOF"), SNAME("metadata"));
+		RID layer_fb = FramebufferCacheRD::get_singleton()->get_cache(color, metadata, rb->get_depth_texture());
+		RenderListParameters world_params(world_list.elements.ptr(), world_list.element_info.ptr(), world_list.elements.size(), dof_exempt_reverse_cull, PASS_MODE_COLOR, COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_DOF_WORLD_LAYER, false, p_render_data->directional_light_soft_shadows, dof_world_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, 1, 0, dof_exempt_specialization);
+		RD::get_singleton()->draw_command_begin_label("Render WORLD_DOF Alpha Layer");
+		Vector<Color> clear_colors = { Color(0, 0, 0, 0), Color(0, 0, 0, 0) };
+		_render_list_with_draw_list(&world_params, layer_fb, RD::DRAW_CLEAR_COLOR_0 | RD::DRAW_CLEAR_COLOR_1, clear_colors, 0.0f, 0u, p_render_data->render_region);
+		const Size2i target_size = rb->get_target_size();
+		const bool use_dof = !p_render_data->transparent_bg && target_size.x >= 8 && target_size.y >= 8 && _debug_draw_can_use_effects(get_debug_draw_mode()) && RSG::camera_attributes->camera_attributes_uses_dof(p_render_data->camera_attributes);
+		static const bool profile_dof = OS::get_singleton()->get_environment("HD2D_DOF_PROFILE") == "1";
+		if (profile_dof) {
+			RD::get_singleton()->capture_timestamp("HD2D WORLD DOF Composite");
+		}
+		world_dof->process(rb, p_render_data->camera_attributes, p_render_data->scene_data->cam_projection.get_z_near(), p_render_data->scene_data->cam_projection.get_z_far(), p_render_data->scene_data->cam_orthogonal, use_dof);
+		if (profile_dof) {
+			RD::get_singleton()->capture_timestamp("<HD2D WORLD DOF Composite End");
+		}
+		RD::get_singleton()->draw_command_end_label();
+	}
+	if (list.elements.is_empty()) {
+		return;
+	}
+	ERR_FAIL_COND_MSG(!dof_exempt_uniform_set.is_valid(), "dof_exempt render state is unavailable.");
+
+	// Native resolved/internal scene-linear HDR, before auto exposure/glow/tonemap.
+	// With MSAA off both attachments are single-sampled and have matching internal
+	// dimensions. Keep hardware reversed-Z depth test and original no_depth_test
+	// policy. Standard alpha pipelines disable depth writes, leaving world depth intact.
+	RID framebuffer = FramebufferCacheRD::get_singleton()->get_cache(rb->get_internal_texture(), rb->get_depth_texture());
+	RD::get_singleton()->draw_command_begin_label("Render DOF Exempt Geometry");
+	RENDER_TIMESTAMP("Render DOF Exempt Geometry");
+	RenderListParameters params(list.elements.ptr(), list.element_info.ptr(), list.elements.size(), dof_exempt_reverse_cull, PASS_MODE_COLOR, COLOR_PASS_FLAG_TRANSPARENT, false, p_render_data->directional_light_soft_shadows, dof_exempt_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, 1, 0, dof_exempt_specialization);
+	_render_list_with_draw_list(&params, framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0u, p_render_data->render_region);
+	RD::get_singleton()->draw_command_end_label();
 }
 
 void RenderForwardClustered::_render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags, const Vector<Color> &p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region) {
@@ -945,6 +1011,8 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 			// Opaque fills motion and alpha lists.
 			render_list[RENDER_LIST_MOTION].clear();
 			render_list[RENDER_LIST_ALPHA].clear();
+			render_list[RENDER_LIST_DOF_EXEMPT].clear();
+			render_list[RENDER_LIST_DOF_WORLD_LAYER].clear();
 		}
 	}
 
@@ -1141,11 +1209,31 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 					force_alpha = true;
 				}
 
-				if (!force_alpha && (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE))) {
+				if (!inst->dof_exempt && !inst->dof_world_layer && !force_alpha && (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE))) {
 					rl->add_element(surf);
 				}
 
-				if (force_alpha || (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA)) {
+				if (inst->dof_exempt || inst->dof_world_layer) {
+					// Keep the original glyph/outline/material alpha and shader. Never put
+					// protected coverage in the main color or depth input to native DOF.
+					surf->color_pass_inclusion_mask = COLOR_PASS_FLAG_TRANSPARENT;
+					bool unsupported_material = !surf->shader->uses_alpha_pass() || surf->shader->depth_draw == SceneShaderForwardClustered::ShaderData::DEPTH_DRAW_ALWAYS || surf->shader->stencil_enabled || surf->shader->uses_depth_prepass_alpha || surf->shader->uses_alpha_clip || surf->shader->uses_sss || surf->shader->uses_alpha_antialiasing || (inst->dof_world_layer && (surf->shader->blend_mode != SceneShaderForwardClustered::ShaderData::BLEND_MODE_MIX || surf->shader->uses_screen_texture || surf->shader->uses_custom_depth || surf->shader->depth_test == SceneShaderForwardClustered::ShaderData::DEPTH_TEST_ENABLED_INVERTED));
+					if (p_render_data->reflection_probe.is_valid()) {
+						ERR_PRINT_ONCE("dof_exempt is not supported in reflection probe rendering. Protected geometry is omitted from the probe.");
+					} else if (unsupported_material) {
+						ERR_PRINT_ONCE("DOF layers require ordinary alpha without depth_draw_always, alpha prepass/cut/coverage AA, stencil or SSS. WORLD_DOF also requires blend_mix, ordinary depth test, no custom DEPTH and no screen texture/refraction. Use Label3D alpha_cut Disabled. Unsupported geometry is omitted.");
+					} else {
+						if (inst->dof_world_layer && !inst->dof_exempt) {
+							surf->color_pass_inclusion_mask |= COLOR_PASS_FLAG_DOF_WORLD_LAYER;
+							render_list[RENDER_LIST_DOF_WORLD_LAYER].add_element(surf);
+						} else {
+							render_list[RENDER_LIST_DOF_EXEMPT].add_element(surf);
+						}
+					}
+					if (uses_gi) {
+						surf->sort.uses_forward_gi = 1;
+					}
+				} else if (force_alpha || (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA)) {
 					surf->color_pass_inclusion_mask = COLOR_PASS_FLAG_TRANSPARENT;
 					render_list[RENDER_LIST_ALPHA].add_element(surf);
 					if (uses_gi) {
@@ -1914,11 +2002,19 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	render_list[RENDER_LIST_OPAQUE].sort_by_key();
 	render_list[RENDER_LIST_MOTION].sort_by_key();
 	render_list[RENDER_LIST_ALPHA].sort_by_reverse_depth_and_priority();
+	render_list[RENDER_LIST_DOF_EXEMPT].sort_by_reverse_depth_and_priority();
+	render_list[RENDER_LIST_DOF_WORLD_LAYER].sort_by_reverse_depth_and_priority();
 
 	int *render_info = p_render_data->render_info ? p_render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_VISIBLE] : (int *)nullptr;
 	_fill_instance_data(RENDER_LIST_OPAQUE, render_info);
 	_fill_instance_data(RENDER_LIST_MOTION, render_info);
 	_fill_instance_data(RENDER_LIST_ALPHA, render_info);
+	if (!render_list[RENDER_LIST_DOF_EXEMPT].elements.is_empty()) {
+		_fill_instance_data(RENDER_LIST_DOF_EXEMPT, render_info);
+	}
+	if (!render_list[RENDER_LIST_DOF_WORLD_LAYER].elements.is_empty()) {
+		_fill_instance_data(RENDER_LIST_DOF_WORLD_LAYER, render_info);
+	}
 
 	RD::get_singleton()->draw_command_end_label();
 
@@ -2415,6 +2511,18 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	uint32_t transparent_pass_uniform_buffer_index = _setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, false);
 
 	rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_ALPHA, p_render_data, radiance_texture, samplers, transparent_pass_uniform_buffer_index, true);
+	dof_world_uniform_set = RID();
+	if (!render_list[RENDER_LIST_DOF_WORLD_LAYER].elements.is_empty()) {
+		dof_world_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_DOF_WORLD_LAYER, p_render_data, radiance_texture, samplers, transparent_pass_uniform_buffer_index, true);
+	}
+	dof_exempt_reverse_cull = reverse_cull;
+	dof_exempt_specialization = base_specialization;
+	dof_exempt_uniform_set = RID();
+	if (!render_list[RENDER_LIST_DOF_EXEMPT].elements.is_empty()) {
+		dof_exempt_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_DOF_EXEMPT, p_render_data, radiance_texture, samplers, transparent_pass_uniform_buffer_index, true);
+		dof_exempt_reverse_cull = reverse_cull;
+		dof_exempt_specialization = base_specialization;
+	}
 
 	{
 		uint32_t transparent_color_pass_flags = (color_pass_flags | uint32_t(COLOR_PASS_FLAG_TRANSPARENT)) & ~uint32_t(COLOR_PASS_FLAG_SEPARATE_SPECULAR);
@@ -5246,6 +5354,9 @@ RenderForwardClustered::RenderForwardClustered() {
 }
 
 RenderForwardClustered::~RenderForwardClustered() {
+	if (world_dof) {
+		memdelete(world_dof);
+	}
 	if (ss_effects != nullptr) {
 		memdelete(ss_effects);
 		ss_effects = nullptr;

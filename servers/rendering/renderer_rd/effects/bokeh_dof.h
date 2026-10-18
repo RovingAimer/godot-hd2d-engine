@@ -68,7 +68,8 @@ private:
 
 		float blur_size_near;
 		float blur_size_far;
-		uint32_t pad[2];
+		uint32_t response_count;
+		uint32_t pad;
 	};
 
 	enum BokehMode {
@@ -84,6 +85,8 @@ private:
 
 	struct Bokeh {
 		BokehPushConstant push_constant;
+		RID response_buffer;
+		uint32_t response_buffer_bytes = 0;
 		BokehDofShaderRD compute_shader;
 		BokehDofRasterShaderRD raster_shader;
 		RID shader_version;

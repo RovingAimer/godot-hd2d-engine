@@ -551,6 +551,10 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 		RD::get_singleton()->draw_command_end_label();
 	}
 
+	// Explicitly selected geometry is absent from the input color/depth above.
+	// Draw exactly once in scene-linear HDR, even when DOF is disabled.
+	_render_buffers_dof_exempt(p_render_data);
+
 	float auto_exposure_scale = 1.0;
 
 	if (can_use_effects && RSG::camera_attributes->camera_attributes_uses_auto_exposure(p_render_data->camera_attributes)) {
