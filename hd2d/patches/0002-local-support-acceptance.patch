@@ -1,0 +1,98 @@
+diff --git a/servers/rendering/renderer_rd/shaders/effects/bokeh_dof.glsl b/servers/rendering/renderer_rd/shaders/effects/bokeh_dof.glsl
+--- a/servers/rendering/renderer_rd/shaders/effects/bokeh_dof.glsl
++++ b/servers/rendering/renderer_rd/shaders/effects/bokeh_dof.glsl
+@@ -107,6 +107,31 @@
+ #endif
+ 
+ #if defined(MODE_BOKEH_BOX) || defined(MODE_BOKEH_HEXAGONAL)
++
++// ponytail: visible FAR extension only; no hidden-background or depth-layer truth.
++// Four rings, four axis taps maximum. Search only toward the visible center side.
++vec4 local_far_support(ivec2 hole, vec2 center, float center_coc, float reach) {
++	ivec2 source_size = textureSize(color_texture, 0);
++	vec2 toward_center = center - vec2(hole);
++	int previous = 0;
++	for (int level = 0; level < 4; level++) {
++		int distance = min(1 << level, int(reach));
++		if (distance <= previous) { continue; }
++		previous = distance;
++		vec3 rgb = vec3(0.0);
++		float count = 0.0;
++		for (int axis = 0; axis < 4; axis++) {
++			ivec2 offset = axis == 0 ? ivec2(distance, 0) : (axis == 1 ? ivec2(-distance, 0) : (axis == 2 ? ivec2(0, distance) : ivec2(0, -distance)));
++			if (dot(vec2(offset), toward_center) <= 0.0) { continue; }
++			ivec2 donor_pos = hole + offset;
++			if (any(lessThan(donor_pos, ivec2(0))) || any(greaterThanEqual(donor_pos, source_size))) { continue; }
++			vec4 donor = texelFetch(color_texture, donor_pos, 0);
++			if (donor.a > 0.0 && donor.a >= center_coc) { rgb += donor.rgb; count += 1.0; }
++		}
++		if (count > 0.0) { return vec4(rgb / count, 1.0); }
++	}
++	return vec4(0.0);
++}
+ 
+ vec4 weighted_filter_dir(vec2 dir, vec2 uv, vec2 pixel_size) {
+ 	dir *= pixel_size;
+@@ -119,6 +144,9 @@
+ 	vec3 near_rgb = vec3(0.0);
+ 	float near_weight = 0.0;
+ 	float blur_scale = params.blur_size / float(params.blur_steps);
++	ivec2 source_size = textureSize(color_texture, 0);
++	vec2 center_pos = uv * vec2(source_size) - 0.5;
++	float support_reach = min(8.0, params.blur_size * length(dir * vec2(source_size)));
+ 
+ 	if (params.use_jitter) {
+ 		uv += dir * (hash12n(uv + params.jitter_seed) - 0.5);
+@@ -133,6 +161,7 @@
+ 		vec4 sample_color = texture(color_texture, suv);
+ 		float limit = (sample_color.a < color.a ? abs(sample_color.a) : abs(color.a)) - DEPTH_GAP;
+ 		float m = smoothstep(radius - 0.5, radius + 0.5, limit);
++		float fill_kernel = smoothstep(radius - 0.5, radius + 0.5, color.a - DEPTH_GAP);
+ 		// Preserve the signed CoC propagation and non-far-center behavior.
+ 		accum += mix(color, sample_color, m);
+ 		if (reconstruct_far) {
+@@ -150,14 +179,41 @@
+ 					vec2 sample_pos = suv * vec2(source_size) - 0.5;
+ 					ivec2 base = ivec2(floor(sample_pos));
+ 					vec2 fraction = fract(sample_pos);
++					vec4 corners[4];
++					vec3 donor_rgb = vec3(0.0);
++					float donor_weight = 0.0;
+ 					for (int j = 0; j < 4; j++) {
+-						vec4 corner = texelFetch(color_texture, clamp(base + ivec2(j & 1, j >> 1), ivec2(0), source_size - 1), 0);
++						corners[j] = texelFetch(color_texture, clamp(base + ivec2(j & 1, j >> 1), ivec2(0), source_size - 1), 0);
++						if (fill_kernel > 0.0 && corners[j].a >= color.a && corners[j].a > 0.0) {
++							float b = ((j & 1) == 0 ? 1.0 - fraction.x : fraction.x) * ((j >> 1) == 0 ? 1.0 - fraction.y : fraction.y);
++							donor_rgb += corners[j].rgb * b;
++							donor_weight += b;
++						}
++					}
++					vec4 donor = vec4(0.0);
++					if (fill_kernel > 0.0) {
++						donor = donor_weight > 0.0 ? vec4(donor_rgb / donor_weight, 1.0) : local_far_support(ivec2(round(sample_pos)), center_pos, color.a, support_reach);
++					}
++					for (int j = 0; j < 4; j++) {
++						vec4 corner = corners[j];
+ 						float b = ((j & 1) == 0 ? 1.0 - fraction.x : fraction.x) * ((j >> 1) == 0 ? 1.0 - fraction.y : fraction.y);
+-						float corner_m = smoothstep(radius - 0.5, radius + 0.5, min(color.a, corner.a) - DEPTH_GAP);
++						float corner_m = (corner.a > 0.0) ? smoothstep(radius - 0.5, radius + 0.5, min(color.a, corner.a) - DEPTH_GAP) : 0.0;
+ 						far_rgb += corner.rgb * (b * corner_m);
+ 						far_weight += b * corner_m;
++						if (corner.a == 0.0 && donor.a > 0.0) {
++							float fill = b * fill_kernel;
++							far_rgb += donor.rgb * fill;
++							far_weight += fill;
++						}
+ 					}
+-				} else {
++				} else if (minimum == 0.0 && maximum == 0.0) {
++					if (fill_kernel > 0.0) {
++						vec4 donor = local_far_support(ivec2(round(suv * vec2(source_size) - 0.5)), center_pos, color.a, support_reach);
++						float fill = donor.a * fill_kernel;
++						far_rgb += donor.rgb * fill;
++						far_weight += fill;
++					}
++				} else if (sample_color.a > 0.0 || minimum < 0.0) {
+ 					far_rgb += sample_color.rgb * m;
+ 					far_weight += m;
+ 				}

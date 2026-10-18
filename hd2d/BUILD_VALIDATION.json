@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-18",
+  "source_commit": "57ef0fd1147006d3668cb6a0fe7060f56fc8dd3f",
+  "source_hashes": "SOURCE_IDENTITY.json:current_sources",
+  "build": {
+    "status": "passed",
+    "fresh_directory": true,
+    "elapsed_seconds": 1084.81,
+    "command": "scons platform=windows target=editor arch=x86_64 accesskit=no d3d12=no angle=no extra_suffix=hd2d -j8",
+    "binary": "bin/godot.windows.editor.x86_64.hd2d.exe",
+    "binary_sha256": "fbc88c8757118fa824f416179a0a524f68a9119a22c2a564ea7bb10ba53cc994",
+    "console_sha256": "98c9fb0c68f96a2fcc54ad9de1f162aa14e1bf5dfd53acc92ea11427957aafa9",
+    "generated_bokeh_shader_sha256": "ca1027104ae13226a2fa1c76cd0a9a301b261b410751cd36b0ad082efac71966",
+    "version_note": "Build began on the upstream base with the reviewed changes already present; version banner embeds ed1daf0bf. The resulting source files match source_commit and the recorded source hashes. No binary Release is published."
+  },
+  "gpu_smoke": {
+    "strong": {
+      "status": "captured_and_visually_inspected",
+      "size": [
+        1920,
+        1080
+      ],
+      "blur_amount": "0.32",
+      "focus": "near",
+      "renderer": "forward_plus",
+      "driver": "vulkan",
+      "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "image_sha256": "29189834f86aa4debae646827c52b3a268cc2e7e0bfff2852cbcaae68cec9ce2",
+      "raw_gpu_buffers_captured": false
+    },
+    "reverse": {
+      "status": "captured_and_visually_inspected",
+      "size": [
+        1920,
+        1080
+      ],
+      "blur_amount": "0.32",
+      "focus": "far",
+      "renderer": "forward_plus",
+      "driver": "vulkan",
+      "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "image_sha256": "2afc65b8f4c0681b3ee8c599d2da6efc51e4fa6faedc02b8c8f74b407db67984",
+      "raw_gpu_buffers_captured": false
+    }
+  },
+  "reverse_runtime_exit_code": 0,
+  "reverse_runtime_log_errors": [],
+  "limits": [
+    "No new export templates or exported-game validation.",
+    "No new full-speed motion acceptance or performance measurement.",
+    "Static screenshots are GPU output observations, not raw-pass numerical validation.",
+    "Scene assets and local capture helpers belong to the framework validation workspace and are not redistributed in this source fork."
+  ]
+}

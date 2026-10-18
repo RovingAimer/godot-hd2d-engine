@@ -1,0 +1,1577 @@
+diff --git a/scene/3d/visual_instance_3d.cpp b/scene/3d/visual_instance_3d.cpp
+index 95a64e4..9b799a4 100644
+--- a/scene/3d/visual_instance_3d.cpp
++++ b/scene/3d/visual_instance_3d.cpp
+@@ -215,6 +215,32 @@ VisualInstance3D::~VisualInstance3D() {
+ 	RenderingServer::get_singleton()->free_rid(instance);
+ }
+ 
++void GeometryInstance3D::set_dof_exempt(bool p_enabled) {
++	dof_exempt = p_enabled;
++	RS::get_singleton()->instance_geometry_set_dof_exempt(get_instance(), p_enabled);
++	if (p_enabled && OS::get_singleton()->get_current_rendering_method() != "forward_plus") {
++		ERR_PRINT_ONCE("dof_exempt requires the custom Forward+ renderer. Mobile and Compatibility do not support this feature.");
++	}
++	update_configuration_warnings();
++}
++
++bool GeometryInstance3D::is_dof_exempt() const {
++	return dof_exempt;
++}
++
++void GeometryInstance3D::set_dof_world_layer(bool p_enabled) {
++	dof_world_layer = p_enabled;
++	RS::get_singleton()->instance_geometry_set_dof_world_layer(get_instance(), p_enabled);
++	if (p_enabled && OS::get_singleton()->get_current_rendering_method() != "forward_plus") {
++		ERR_PRINT_ONCE("dof_world_layer requires the custom Forward+ renderer. Mobile and Compatibility do not support this feature.");
++	}
++	update_configuration_warnings();
++}
++
++bool GeometryInstance3D::is_dof_world_layer() const {
++	return dof_world_layer;
++}
++
+ void GeometryInstance3D::set_material_override(const Ref<Material> &p_material) {
+ 	if (material_override.is_valid()) {
+ 		material_override->disconnect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
+@@ -528,6 +554,10 @@ PackedStringArray GeometryInstance3D::get_configuration_warnings() const {
+ 		warnings.push_back(RTR("The GeometryInstance3D is configured to fade out smoothly over distance, but the fade transition distance is set to 0.\nTo resolve this, increase Visibility Range End Margin above 0."));
+ 	}
+ 
++	if ((dof_exempt || dof_world_layer) && OS::get_singleton()->get_current_rendering_method() != "forward_plus") {
++		warnings.push_back(RTR("DOF exemption requires the custom Forward+ renderer."));
++	}
++
+ 	if (!Math::is_zero_approx(transparency) && OS::get_singleton()->get_current_rendering_method() != "forward_plus") {
+ 		warnings.push_back(RTR("GeometryInstance3D transparency is only available when using the Forward+ renderer."));
+ 	}
+@@ -560,6 +590,10 @@ void GeometryInstance3D::_bind_methods() {
+ 
+ 	ClassDB::bind_method(D_METHOD("set_transparency", "transparency"), &GeometryInstance3D::set_transparency);
+ 	ClassDB::bind_method(D_METHOD("get_transparency"), &GeometryInstance3D::get_transparency);
++	ClassDB::bind_method(D_METHOD("set_dof_exempt", "enabled"), &GeometryInstance3D::set_dof_exempt);
++	ClassDB::bind_method(D_METHOD("set_dof_world_layer", "enabled"), &GeometryInstance3D::set_dof_world_layer);
++	ClassDB::bind_method(D_METHOD("is_dof_exempt"), &GeometryInstance3D::is_dof_exempt);
++	ClassDB::bind_method(D_METHOD("is_dof_world_layer"), &GeometryInstance3D::is_dof_world_layer);
+ 
+ 	ClassDB::bind_method(D_METHOD("set_visibility_range_end_margin", "distance"), &GeometryInstance3D::set_visibility_range_end_margin);
+ 	ClassDB::bind_method(D_METHOD("get_visibility_range_end_margin"), &GeometryInstance3D::get_visibility_range_end_margin);
+@@ -605,6 +639,8 @@ void GeometryInstance3D::_bind_methods() {
+ 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material_override", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial", PROPERTY_USAGE_DEFAULT), "set_material_override", "get_material_override");
+ 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material_overlay", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial", PROPERTY_USAGE_DEFAULT), "set_material_overlay", "get_material_overlay");
+ 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "transparency", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), "set_transparency", "get_transparency");
++	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "dof_exempt"), "set_dof_exempt", "is_dof_exempt");
++	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "dof_world_layer"), "set_dof_world_layer", "is_dof_world_layer");
+ 	ADD_PROPERTY(PropertyInfo(Variant::INT, "cast_shadow", PROPERTY_HINT_ENUM, "Off,On,Double-Sided,Shadows Only"), "set_cast_shadows_setting", "get_cast_shadows_setting");
+ 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "extra_cull_margin", PROPERTY_HINT_RANGE, "0,16384,0.01,suffix:m"), "set_extra_cull_margin", "get_extra_cull_margin");
+ 	ADD_PROPERTY(PropertyInfo(Variant::AABB, "custom_aabb", PROPERTY_HINT_NONE, "suffix:m"), "set_custom_aabb", "get_custom_aabb");
+diff --git a/scene/3d/visual_instance_3d.h b/scene/3d/visual_instance_3d.h
+index 48e26e0..5b20bbb 100644
+--- a/scene/3d/visual_instance_3d.h
++++ b/scene/3d/visual_instance_3d.h
+@@ -132,6 +132,8 @@ private:
+ 	VisibilityRangeFadeMode visibility_range_fade_mode = VISIBILITY_RANGE_FADE_DISABLED;
+ 
+ 	float transparency = 0.0f;
++	bool dof_exempt = false;
++	bool dof_world_layer = false;
+ 
+ 	float lod_bias = 1.0;
+ 
+@@ -161,6 +163,11 @@ public:
+ 	void set_transparency(float p_transparency);
+ 	float get_transparency() const;
+ 
++	void set_dof_exempt(bool p_enabled);
++	void set_dof_world_layer(bool p_enabled);
++	bool is_dof_exempt() const;
++	bool is_dof_world_layer() const;
++
+ 	void set_visibility_range_begin(float p_dist);
+ 	float get_visibility_range_begin() const;
+ 
+diff --git a/servers/rendering/renderer_geometry_instance.h b/servers/rendering/renderer_geometry_instance.h
+index 7c7991e..88dbb95 100644
+--- a/servers/rendering/renderer_geometry_instance.h
++++ b/servers/rendering/renderer_geometry_instance.h
+@@ -55,6 +55,11 @@ public:
+ 	virtual void set_fade_range(bool p_enable_near, float p_near_begin, float p_near_end, bool p_enable_far, float p_far_begin, float p_far_end) = 0;
+ 	virtual void set_parent_fade_alpha(float p_alpha) = 0;
+ 	virtual void set_transparency(float p_transparency) = 0;
++
++	bool dof_exempt = false;
++	bool dof_world_layer = false;
++	virtual void set_dof_exempt(bool p_enabled) { dof_exempt = p_enabled; }
++	virtual void set_dof_world_layer(bool p_enabled) { dof_world_layer = p_enabled; }
+ 	virtual void set_use_baked_light(bool p_enable) = 0;
+ 	virtual void set_use_dynamic_gi(bool p_enable) = 0;
+ 	virtual void set_use_lightmap(RID p_lightmap_instance, const Rect2 &p_lightmap_uv_scale, int p_lightmap_slice_index) = 0;
+diff --git a/servers/rendering/renderer_rd/effects/bokeh_dof.cpp b/servers/rendering/renderer_rd/effects/bokeh_dof.cpp
+index b7b7870..c16831c 100644
+--- a/servers/rendering/renderer_rd/effects/bokeh_dof.cpp
++++ b/servers/rendering/renderer_rd/effects/bokeh_dof.cpp
+@@ -30,6 +30,7 @@
+ 
+ #include "bokeh_dof.h"
+ 
++#include "core/os/os.h"
+ #include "servers/rendering/renderer_rd/effects/copy_effects.h"
+ #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
+ #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
+@@ -79,6 +80,9 @@ BokehDOF::BokehDOF(bool p_prefer_raster_effects) {
+ }
+ 
+ BokehDOF::~BokehDOF() {
++	if (bokeh.response_buffer.is_valid()) {
++		RD::get_singleton()->free(bokeh.response_buffer);
++	}
+ 	for (int i = 0; i < BOKEH_MAX; i++) {
+ 		bokeh.compute_pipelines[i].free();
+ 	}
+@@ -132,6 +136,35 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
+ 	bokeh.push_constant.orthogonal = p_cam_orthogonal;
+ 	bokeh.push_constant.blur_size = (dof_near_size < 0.0 && dof_far_size < 0.0) ? 32 : bokeh_size; // Cap with physically-based to keep performance reasonable.
+ 
++	const Vector<float> responses = RSG::camera_attributes->camera_attributes_get_dof_responses(p_camera_attributes);
++	bokeh.push_constant.response_count = responses.size() / 8;
++	if (!responses.is_empty()) {
++		// Interpolate the existing endpoint sampling support as well as signed CoC.
++		// A single endpoint therefore has exactly the stock native filter radius.
++		float support = 0.0f;
++		for (int i = 0; i < responses.size(); i += 8) {
++			const float endpoint_support = (responses[i + 2] < 0.0f && responses[i + 5] < 0.0f) ? 32.0f : responses[i + 6] * 64.0f;
++			support += responses[i + 7] * endpoint_support;
++		}
++		bokeh.push_constant.blur_size = support;
++	}
++	// One buffer belongs to this effect, not to each camera/frame. Resize to the
++	// actual input so cancelled/reopened sequences do not retain peak allocations.
++	const uint64_t requested_bytes = MAX(uint64_t(responses.size()) * sizeof(float), uint64_t(8 * sizeof(float)));
++	ERR_FAIL_COND_MSG(requested_bytes > UINT32_MAX, "DOF response buffer exceeds the RenderingDevice size limit.");
++	const uint32_t response_bytes = uint32_t(requested_bytes);
++	if (bokeh.response_buffer_bytes != response_bytes) {
++		if (bokeh.response_buffer.is_valid()) {
++			RD::get_singleton()->free(bokeh.response_buffer);
++		}
++		bokeh.response_buffer = RD::get_singleton()->storage_buffer_create(response_bytes);
++		bokeh.response_buffer_bytes = response_bytes;
++	}
++	ERR_FAIL_COND(bokeh.response_buffer.is_null());
++	if (!responses.is_empty()) {
++		RD::get_singleton()->buffer_update(bokeh.response_buffer, 0, response_bytes, responses.ptr());
++	}
++
+ 	bokeh.push_constant.second_pass = false;
+ 	bokeh.push_constant.half_size = false;
+ 
+@@ -151,6 +184,11 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
+ 	RD::Uniform u_half_image0(RD::UNIFORM_TYPE_IMAGE, 0, p_buffers.half_texture[0]);
+ 	RD::Uniform u_half_image1(RD::UNIFORM_TYPE_IMAGE, 0, p_buffers.half_texture[1]);
+ 
++	static const bool profile_dof = OS::get_singleton()->get_environment("HD2D_DOF_PROFILE") == "1";
++	if (profile_dof) {
++		RD::get_singleton()->capture_timestamp("<HD2D Native DOF Begin");
++		RD::get_singleton()->capture_timestamp("HD2D GEN CoC");
++	}
+ 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+ 
+ 	/* FIRST PASS */
+@@ -164,6 +202,8 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
+ 
+ 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 0, u_base_image), 0);
+ 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 1, u_depth_texture), 1);
++	RD::Uniform u_responses(RD::UNIFORM_TYPE_STORAGE_BUFFER, 0, bokeh.response_buffer);
++	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 2, u_responses), 2);
+ 
+ 	bokeh.push_constant.size[0] = p_buffers.base_texture_size.x;
+ 	bokeh.push_constant.size[1] = p_buffers.base_texture_size.y;
+@@ -172,6 +212,9 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
+ 
+ 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_buffers.base_texture_size.x, p_buffers.base_texture_size.y, 1);
+ 	RD::get_singleton()->compute_list_add_barrier(compute_list);
++	if (profile_dof) {
++		RD::get_singleton()->capture_timestamp(bokeh_shape == RSE::DOF_BOKEH_CIRCLE ? "HD2D Circular Filter" : "HD2D Filter1");
++	}
+ 
+ 	if (bokeh_shape == RSE::DOF_BOKEH_BOX || bokeh_shape == RSE::DOF_BOKEH_HEXAGON) {
+ 		//second pass
+@@ -208,6 +251,9 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
+ 		RD::get_singleton()->compute_list_add_barrier(compute_list);
+ 
+ 		//third pass
++		if (profile_dof) {
++			RD::get_singleton()->capture_timestamp("HD2D Filter2");
++		}
+ 		bokeh.push_constant.second_pass = true;
+ 
+ 		if (blur_quality == RSE::DOF_BLUR_QUALITY_VERY_LOW || blur_quality == RSE::DOF_BLUR_QUALITY_LOW) {
+@@ -225,6 +271,9 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
+ 
+ 		if (blur_quality == RSE::DOF_BLUR_QUALITY_VERY_LOW || blur_quality == RSE::DOF_BLUR_QUALITY_LOW) {
+ 			//forth pass, upscale for low quality
++			if (profile_dof) {
++				RD::get_singleton()->capture_timestamp("HD2D Native Composite");
++			}
+ 
+ 			shader = bokeh.compute_shader.version_get_shader(bokeh.shader_version, BOKEH_COMPOSITE);
+ 			ERR_FAIL_COND(shader.is_null());
+@@ -233,6 +282,8 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
+ 
+ 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 0, u_base_image), 0);
+ 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 1, u_half_texture1), 1);
++			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 2, u_depth_texture), 2);
++			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 3, u_responses), 3);
+ 
+ 			bokeh.push_constant.size[0] = p_buffers.base_texture_size.x;
+ 			bokeh.push_constant.size[1] = p_buffers.base_texture_size.y;
+@@ -272,6 +323,9 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
+ 		RD::get_singleton()->compute_list_add_barrier(compute_list);
+ 
+ 		//circle is just one pass, then upscale
++		if (profile_dof) {
++			RD::get_singleton()->capture_timestamp("HD2D Native Composite");
++		}
+ 
+ 		// upscale
+ 
+@@ -282,6 +336,8 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
+ 
+ 		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 0, u_base_image), 0);
+ 		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 1, u_half_texture0), 1);
++		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 2, u_depth_texture), 2);
++		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 3, u_responses), 3);
+ 
+ 		bokeh.push_constant.size[0] = p_buffers.base_texture_size.x;
+ 		bokeh.push_constant.size[1] = p_buffers.base_texture_size.y;
+@@ -294,10 +350,14 @@ void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_att
+ 	}
+ 
+ 	RD::get_singleton()->compute_list_end();
++	if (profile_dof) {
++		RD::get_singleton()->capture_timestamp("<HD2D Native DOF End");
++	}
+ }
+ 
+ void BokehDOF::bokeh_dof_raster(const BokehBuffers &p_buffers, RID p_camera_attributes, float p_cam_znear, float p_cam_zfar, bool p_cam_orthogonal) {
+ 	ERR_FAIL_COND_MSG(!prefer_raster_effects, "Can't blur-based depth of field with the clustered renderer.");
++	ERR_FAIL_COND_MSG(!RSG::camera_attributes->camera_attributes_get_dof_responses(p_camera_attributes).is_empty(), "DOF response blending is unavailable in the Mobile raster DOF path.");
+ 
+ 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+ 	ERR_FAIL_NULL(uniform_set_cache);
+diff --git a/servers/rendering/renderer_rd/effects/bokeh_dof.h b/servers/rendering/renderer_rd/effects/bokeh_dof.h
+index b1f79dd..acf6ecc 100644
+--- a/servers/rendering/renderer_rd/effects/bokeh_dof.h
++++ b/servers/rendering/renderer_rd/effects/bokeh_dof.h
+@@ -68,7 +68,8 @@ private:
+ 
+ 		float blur_size_near;
+ 		float blur_size_far;
+-		uint32_t pad[2];
++		uint32_t response_count;
++		uint32_t pad;
+ 	};
+ 
+ 	enum BokehMode {
+@@ -84,6 +85,8 @@ private:
+ 
+ 	struct Bokeh {
+ 		BokehPushConstant push_constant;
++		RID response_buffer;
++		uint32_t response_buffer_bytes = 0;
+ 		BokehDofShaderRD compute_shader;
+ 		BokehDofRasterShaderRD raster_shader;
+ 		RID shader_version;
+diff --git a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
+index 370d3b6..f2e32ab 100644
+--- a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
++++ b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
+@@ -31,6 +31,7 @@
+ #include "render_forward_clustered.h"
+ 
+ #include "core/config/project_settings.h"
++#include "core/os/os.h"
+ #include "servers/rendering/renderer_rd/environment/fog.h"
+ #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
+ #include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
+@@ -456,6 +457,10 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
+ 					pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_MULTIVIEW;
+ 				}
+ 
++				if constexpr ((p_color_pass_flags & COLOR_PASS_FLAG_DOF_WORLD_LAYER) != 0) {
++					pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_DOF_WORLD_LAYER;
++				}
++
+ 				pipeline_key.version = SceneShaderForwardClustered::PIPELINE_VERSION_COLOR_PASS;
+ 			} break;
+ 			case PASS_MODE_SHADOW:
+@@ -636,6 +641,7 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
+ 			switch (p_params->color_pass_flags) {
+ 				VALID_FLAG_COMBINATION(0);
+ 				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT);
++				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_DOF_WORLD_LAYER);
+ 				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW);
+ 				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MOTION_VECTORS);
+ 				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_SEPARATE_SPECULAR);
+@@ -679,6 +685,66 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
+ 	}
+ }
+ 
++
++void RenderForwardClustered::_render_buffers_dof_exempt(const RenderDataRD *p_render_data) {
++	RenderList &list = render_list[RENDER_LIST_DOF_EXEMPT];
++	RenderList &world_list = render_list[RENDER_LIST_DOF_WORLD_LAYER];
++	if (world_list.elements.is_empty() && p_render_data->render_buffers.is_valid() && p_render_data->render_buffers->has_texture(SNAME("WorldDOF"), SNAME("color"))) {
++		p_render_data->render_buffers->clear_context(SNAME("WorldDOF"));
++	}
++	if (list.elements.is_empty() && world_list.elements.is_empty()) {
++		return; // No pass, allocation or GPU work when no visible object opts in.
++	}
++	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
++	ERR_FAIL_COND(rb.is_null());
++	ERR_FAIL_COND_MSG(rb->get_view_count() != 1, "dof_exempt currently supports a single Forward+ view only. Protected geometry is omitted.");
++	ERR_FAIL_COND_MSG(rb->get_msaa_3d() != RSE::VIEWPORT_MSAA_DISABLED, "dof_exempt currently requires MSAA disabled: resolved R32 scene depth is not a depth attachment. Protected geometry is omitted.");
++	ERR_FAIL_COND_MSG(rb->get_use_taa(), "dof_exempt currently requires TAA disabled to avoid jitter mismatch. Protected geometry is omitted.");
++	ERR_FAIL_COND_MSG(rb->get_scaling_3d_mode() == RSE::VIEWPORT_SCALING_3D_MODE_FSR2 || rb->get_scaling_3d_mode() == RSE::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL, "dof_exempt does not yet support temporal upscalers. Protected geometry is omitted.");
++	if (!world_list.elements.is_empty()) {
++		ERR_FAIL_COND_MSG(!dof_world_uniform_set.is_valid(), "dof_world_layer render state is unavailable.");
++		ERR_FAIL_COND_MSG(rb->get_base_data_format() != RD::DATA_FORMAT_R16G16B16A16_SFLOAT, "dof_world_layer requires RGBA16F HDR scene color.");
++		if (!world_dof) {
++			world_dof = memnew(RendererRD::WorldDOF);
++		}
++		scene_shader.enable_dof_world_layer_shader_group();
++		world_dof->ensure_buffers(rb);
++		RID color = rb->get_texture(SNAME("WorldDOF"), SNAME("color"));
++		RID metadata = rb->get_texture(SNAME("WorldDOF"), SNAME("metadata"));
++		RID layer_fb = FramebufferCacheRD::get_singleton()->get_cache(color, metadata, rb->get_depth_texture());
++		RenderListParameters world_params(world_list.elements.ptr(), world_list.element_info.ptr(), world_list.elements.size(), dof_exempt_reverse_cull, PASS_MODE_COLOR, COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_DOF_WORLD_LAYER, false, p_render_data->directional_light_soft_shadows, dof_world_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, 1, 0, dof_exempt_specialization);
++		RD::get_singleton()->draw_command_begin_label("Render WORLD_DOF Alpha Layer");
++		Vector<Color> clear_colors = { Color(0, 0, 0, 0), Color(0, 0, 0, 0) };
++		_render_list_with_draw_list(&world_params, layer_fb, RD::DRAW_CLEAR_COLOR_0 | RD::DRAW_CLEAR_COLOR_1, clear_colors, 0.0f, 0u, p_render_data->render_region);
++		const Size2i target_size = rb->get_target_size();
++		const bool use_dof = !p_render_data->transparent_bg && target_size.x >= 8 && target_size.y >= 8 && _debug_draw_can_use_effects(get_debug_draw_mode()) && RSG::camera_attributes->camera_attributes_uses_dof(p_render_data->camera_attributes);
++		static const bool profile_dof = OS::get_singleton()->get_environment("HD2D_DOF_PROFILE") == "1";
++		if (profile_dof) {
++			RD::get_singleton()->capture_timestamp("HD2D WORLD DOF Composite");
++		}
++		world_dof->process(rb, p_render_data->camera_attributes, p_render_data->scene_data->cam_projection.get_z_near(), p_render_data->scene_data->cam_projection.get_z_far(), p_render_data->scene_data->cam_orthogonal, use_dof);
++		if (profile_dof) {
++			RD::get_singleton()->capture_timestamp("<HD2D WORLD DOF Composite End");
++		}
++		RD::get_singleton()->draw_command_end_label();
++	}
++	if (list.elements.is_empty()) {
++		return;
++	}
++	ERR_FAIL_COND_MSG(!dof_exempt_uniform_set.is_valid(), "dof_exempt render state is unavailable.");
++
++	// Native resolved/internal scene-linear HDR, before auto exposure/glow/tonemap.
++	// With MSAA off both attachments are single-sampled and have matching internal
++	// dimensions. Keep hardware reversed-Z depth test and original no_depth_test
++	// policy. Standard alpha pipelines disable depth writes, leaving world depth intact.
++	RID framebuffer = FramebufferCacheRD::get_singleton()->get_cache(rb->get_internal_texture(), rb->get_depth_texture());
++	RD::get_singleton()->draw_command_begin_label("Render DOF Exempt Geometry");
++	RENDER_TIMESTAMP("Render DOF Exempt Geometry");
++	RenderListParameters params(list.elements.ptr(), list.element_info.ptr(), list.elements.size(), dof_exempt_reverse_cull, PASS_MODE_COLOR, COLOR_PASS_FLAG_TRANSPARENT, false, p_render_data->directional_light_soft_shadows, dof_exempt_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, 1, 0, dof_exempt_specialization);
++	_render_list_with_draw_list(&params, framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0u, p_render_data->render_region);
++	RD::get_singleton()->draw_command_end_label();
++}
++
+ void RenderForwardClustered::_render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags, const Vector<Color> &p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region) {
+ 	RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(p_framebuffer);
+ 	p_params->framebuffer_format = fb_format;
+@@ -945,6 +1011,8 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
+ 			// Opaque fills motion and alpha lists.
+ 			render_list[RENDER_LIST_MOTION].clear();
+ 			render_list[RENDER_LIST_ALPHA].clear();
++			render_list[RENDER_LIST_DOF_EXEMPT].clear();
++			render_list[RENDER_LIST_DOF_WORLD_LAYER].clear();
+ 		}
+ 	}
+ 
+@@ -1141,11 +1209,31 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
+ 					force_alpha = true;
+ 				}
+ 
+-				if (!force_alpha && (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE))) {
++				if (!inst->dof_exempt && !inst->dof_world_layer && !force_alpha && (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE))) {
+ 					rl->add_element(surf);
+ 				}
+ 
+-				if (force_alpha || (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA)) {
++				if (inst->dof_exempt || inst->dof_world_layer) {
++					// Keep the original glyph/outline/material alpha and shader. Never put
++					// protected coverage in the main color or depth input to native DOF.
++					surf->color_pass_inclusion_mask = COLOR_PASS_FLAG_TRANSPARENT;
++					bool unsupported_material = !surf->shader->uses_alpha_pass() || surf->shader->depth_draw == SceneShaderForwardClustered::ShaderData::DEPTH_DRAW_ALWAYS || surf->shader->stencil_enabled || surf->shader->uses_depth_prepass_alpha || surf->shader->uses_alpha_clip || surf->shader->uses_sss || surf->shader->uses_alpha_antialiasing || (inst->dof_world_layer && (surf->shader->blend_mode != SceneShaderForwardClustered::ShaderData::BLEND_MODE_MIX || surf->shader->uses_screen_texture || surf->shader->uses_custom_depth || surf->shader->depth_test == SceneShaderForwardClustered::ShaderData::DEPTH_TEST_ENABLED_INVERTED));
++					if (p_render_data->reflection_probe.is_valid()) {
++						ERR_PRINT_ONCE("dof_exempt is not supported in reflection probe rendering. Protected geometry is omitted from the probe.");
++					} else if (unsupported_material) {
++						ERR_PRINT_ONCE("DOF layers require ordinary alpha without depth_draw_always, alpha prepass/cut/coverage AA, stencil or SSS. WORLD_DOF also requires blend_mix, ordinary depth test, no custom DEPTH and no screen texture/refraction. Use Label3D alpha_cut Disabled. Unsupported geometry is omitted.");
++					} else {
++						if (inst->dof_world_layer && !inst->dof_exempt) {
++							surf->color_pass_inclusion_mask |= COLOR_PASS_FLAG_DOF_WORLD_LAYER;
++							render_list[RENDER_LIST_DOF_WORLD_LAYER].add_element(surf);
++						} else {
++							render_list[RENDER_LIST_DOF_EXEMPT].add_element(surf);
++						}
++					}
++					if (uses_gi) {
++						surf->sort.uses_forward_gi = 1;
++					}
++				} else if (force_alpha || (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA)) {
+ 					surf->color_pass_inclusion_mask = COLOR_PASS_FLAG_TRANSPARENT;
+ 					render_list[RENDER_LIST_ALPHA].add_element(surf);
+ 					if (uses_gi) {
+@@ -1914,11 +2002,19 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
+ 	render_list[RENDER_LIST_OPAQUE].sort_by_key();
+ 	render_list[RENDER_LIST_MOTION].sort_by_key();
+ 	render_list[RENDER_LIST_ALPHA].sort_by_reverse_depth_and_priority();
++	render_list[RENDER_LIST_DOF_EXEMPT].sort_by_reverse_depth_and_priority();
++	render_list[RENDER_LIST_DOF_WORLD_LAYER].sort_by_reverse_depth_and_priority();
+ 
+ 	int *render_info = p_render_data->render_info ? p_render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_VISIBLE] : (int *)nullptr;
+ 	_fill_instance_data(RENDER_LIST_OPAQUE, render_info);
+ 	_fill_instance_data(RENDER_LIST_MOTION, render_info);
+ 	_fill_instance_data(RENDER_LIST_ALPHA, render_info);
++	if (!render_list[RENDER_LIST_DOF_EXEMPT].elements.is_empty()) {
++		_fill_instance_data(RENDER_LIST_DOF_EXEMPT, render_info);
++	}
++	if (!render_list[RENDER_LIST_DOF_WORLD_LAYER].elements.is_empty()) {
++		_fill_instance_data(RENDER_LIST_DOF_WORLD_LAYER, render_info);
++	}
+ 
+ 	RD::get_singleton()->draw_command_end_label();
+ 
+@@ -2415,6 +2511,18 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
+ 	uint32_t transparent_pass_uniform_buffer_index = _setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, false);
+ 
+ 	rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_ALPHA, p_render_data, radiance_texture, samplers, transparent_pass_uniform_buffer_index, true);
++	dof_world_uniform_set = RID();
++	if (!render_list[RENDER_LIST_DOF_WORLD_LAYER].elements.is_empty()) {
++		dof_world_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_DOF_WORLD_LAYER, p_render_data, radiance_texture, samplers, transparent_pass_uniform_buffer_index, true);
++	}
++	dof_exempt_reverse_cull = reverse_cull;
++	dof_exempt_specialization = base_specialization;
++	dof_exempt_uniform_set = RID();
++	if (!render_list[RENDER_LIST_DOF_EXEMPT].elements.is_empty()) {
++		dof_exempt_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_DOF_EXEMPT, p_render_data, radiance_texture, samplers, transparent_pass_uniform_buffer_index, true);
++		dof_exempt_reverse_cull = reverse_cull;
++		dof_exempt_specialization = base_specialization;
++	}
+ 
+ 	{
+ 		uint32_t transparent_color_pass_flags = (color_pass_flags | uint32_t(COLOR_PASS_FLAG_TRANSPARENT)) & ~uint32_t(COLOR_PASS_FLAG_SEPARATE_SPECULAR);
+@@ -5246,6 +5354,9 @@ RenderForwardClustered::RenderForwardClustered() {
+ }
+ 
+ RenderForwardClustered::~RenderForwardClustered() {
++	if (world_dof) {
++		memdelete(world_dof);
++	}
+ 	if (ss_effects != nullptr) {
+ 		memdelete(ss_effects);
+ 		ss_effects = nullptr;
+diff --git a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h
+index be97ee2..668fb28 100644
+--- a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h
++++ b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h
+@@ -37,6 +37,7 @@
+ #include "servers/rendering/renderer_rd/effects/motion_vectors_store.h"
+ #include "servers/rendering/renderer_rd/effects/ss_effects.h"
+ #include "servers/rendering/renderer_rd/effects/taa.h"
++#include "servers/rendering/renderer_rd/effects/world_dof.h"
+ #include "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h"
+ #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
+ #include "servers/rendering/renderer_rd/shaders/forward_clustered/best_fit_normal.glsl.gen.h"
+@@ -79,6 +80,8 @@ class RenderForwardClustered : public RendererSceneRenderRD {
+ 		RENDER_LIST_OPAQUE, //used for opaque objects
+ 		RENDER_LIST_MOTION, //used for opaque objects with motion
+ 		RENDER_LIST_ALPHA, //used for transparent objects
++		RENDER_LIST_DOF_EXEMPT, //explicit geometry drawn after native DOF
++		RENDER_LIST_DOF_WORLD_LAYER, //soft alpha with independent depth and coverage
+ 		RENDER_LIST_SECONDARY, //used for shadows and other objects
+ 		RENDER_LIST_MAX
+ 	};
+@@ -214,6 +217,7 @@ private:
+ 		COLOR_PASS_FLAG_SEPARATE_SPECULAR = 1 << 1,
+ 		COLOR_PASS_FLAG_MULTIVIEW = 1 << 2,
+ 		COLOR_PASS_FLAG_MOTION_VECTORS = 1 << 3,
++		COLOR_PASS_FLAG_DOF_WORLD_LAYER = 1 << 4,
+ 	};
+ 
+ 	struct GeometryInstanceSurfaceDataCache;
+@@ -406,7 +410,7 @@ private:
+ 		uint32_t max_lightmaps;
+ 		RID lightmap_buffer;
+ 
+-		MultiUmaBuffer<1u> instance_buffer[RENDER_LIST_MAX] = { MultiUmaBuffer<1u>("RENDER_LIST_OPAQUE"), MultiUmaBuffer<1u>("RENDER_LIST_MOTION"), MultiUmaBuffer<1u>("RENDER_LIST_ALPHA"), MultiUmaBuffer<1u>("RENDER_LIST_SECONDARY") };
++		MultiUmaBuffer<1u> instance_buffer[RENDER_LIST_MAX] = { MultiUmaBuffer<1u>("RENDER_LIST_OPAQUE"), MultiUmaBuffer<1u>("RENDER_LIST_MOTION"), MultiUmaBuffer<1u>("RENDER_LIST_ALPHA"), MultiUmaBuffer<1u>("RENDER_LIST_DOF_EXEMPT"), MultiUmaBuffer<1u>("RENDER_LIST_DOF_WORLD_LAYER"), MultiUmaBuffer<1u>("RENDER_LIST_SECONDARY") };
+ 		InstanceData *curr_gpu_ptr[RENDER_LIST_MAX] = {};
+ 
+ 		LightmapCaptureData *lightmap_captures = nullptr;
+@@ -737,6 +741,13 @@ private:
+ 	};
+ 
+ 	RenderList render_list[RENDER_LIST_MAX];
++	// Per-render call state, consumed synchronously by the post-DOF hook.
++	RID dof_exempt_uniform_set;
++	RID dof_world_uniform_set;
++	RendererRD::WorldDOF *world_dof = nullptr;
++	bool dof_exempt_reverse_cull = false;
++	SceneShaderForwardClustered::ShaderSpecialization dof_exempt_specialization = {};
++	virtual void _render_buffers_dof_exempt(const RenderDataRD *p_render_data) override;
+ 
+ 	virtual void _update_shader_quality_settings() override;
+ 
+diff --git a/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp b/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp
+index 44a97f3..09b4660 100644
+--- a/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp
++++ b/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp
+@@ -60,6 +60,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
+ 
+ 	uses_point_size = false;
+ 	uses_alpha = false;
++	uses_custom_depth = false;
+ 	uses_alpha_clip = false;
+ 	uses_alpha_antialiasing = false;
+ 	uses_blend_alpha = false;
+@@ -123,6 +124,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
+ 	actions.render_mode_flags["world_vertex_coords"] = &uses_world_coordinates;
+ 
+ 	actions.usage_flag_pointers["ALPHA"] = &uses_alpha;
++	actions.usage_flag_pointers["DEPTH"] = &uses_custom_depth;
+ 	actions.usage_flag_pointers["ALPHA_SCISSOR_THRESHOLD"] = &uses_alpha_clip;
+ 	actions.usage_flag_pointers["ALPHA_HASH_SCALE"] = &uses_alpha_clip;
+ 	actions.usage_flag_pointers["ALPHA_ANTIALIASING_EDGE"] = &uses_alpha_antialiasing;
+@@ -319,6 +321,10 @@ uint16_t SceneShaderForwardClustered::ShaderData::_get_shader_version(PipelineVe
+ 				shader_flags |= SHADER_COLOR_PASS_FLAG_MULTIVIEW;
+ 			}
+ 
++			if (p_color_pass_flags & PIPELINE_COLOR_PASS_FLAG_DOF_WORLD_LAYER) {
++				shader_flags |= SHADER_COLOR_PASS_FLAG_DOF_WORLD_LAYER;
++			}
++
+ 			return ShaderVersion::SHADER_VERSION_COLOR_PASS * 2 + shader_flags;
+ 		} break;
+ 		default: {
+@@ -480,6 +486,13 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
+ 		}
+ 	}
+ 
++	if (p_pipeline_key.color_pass_flags & PIPELINE_COLOR_PASS_FLAG_DOF_WORLD_LAYER) {
++		// Both targets use ordinary straight-alpha input. The cleared targets
++		// accumulate premultiplied HDR and coverage-weighted view depth.
++		blend_state.attachments = { blend_attachment, blend_attachment };
++		depth_stencil_state.enable_depth_write = false;
++	}
++
+ 	// Convert the specialization from the key to pipeline specialization constants.
+ 	Vector<RD::PipelineSpecializationConstant> specialization_constants;
+ 	RD::PipelineSpecializationConstant sc;
+@@ -662,6 +675,7 @@ void SceneShaderForwardClustered::init(const String p_defines) {
+ 			"\n#define USE_LIGHTMAP\n", // SHADER_COLOR_PASS_FLAG_LIGHTMAP
+ 			"\n#define USE_MULTIVIEW\n", // SHADER_COLOR_PASS_FLAG_MULTIVIEW
+ 			"\n#define MOTION_VECTORS\n", // SHADER_COLOR_PASS_FLAG_MOTION_VECTORS
++			"\n#define MODE_DOF_WORLD_LAYER\n", // SHADER_COLOR_PASS_FLAG_DOF_WORLD_LAYER
+ 		};
+ 
+ 		for (int i = 0; i < SHADER_COLOR_PASS_FLAG_COUNT; i++) {
+@@ -684,12 +698,25 @@ void SceneShaderForwardClustered::init(const String p_defines) {
+ 				group = SHADER_GROUP_MULTIVIEW;
+ 			}
+ 
++			if (i & SHADER_COLOR_PASS_FLAG_DOF_WORLD_LAYER) {
++				group = SHADER_GROUP_DOF_WORLD_LAYER;
++			}
++
+ 			shader_versions.push_back(ShaderRD::VariantDefine(group, version, false));
+ 		}
+ 
+ 		Vector<uint64_t> dynamic_buffers;
+ 		dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(RenderForwardClustered::RENDER_PASS_UNIFORM_SET, 2));
+ 		shader.initialize(shader_versions, p_defines, Vector<RD::PipelineImmutableSampler>(), dynamic_buffers);
++		// Keep stable variant indices, but never compile unsupported WORLD pairs.
++		// Only ordinary/lightmap color, each with its ubershader, is reachable.
++		for (int flags = 0; flags < SHADER_COLOR_PASS_FLAG_COUNT; flags++) {
++			const int unsupported = SHADER_COLOR_PASS_FLAG_SEPARATE_SPECULAR | SHADER_COLOR_PASS_FLAG_MULTIVIEW | SHADER_COLOR_PASS_FLAG_MOTION_VECTORS;
++			if ((flags & SHADER_COLOR_PASS_FLAG_DOF_WORLD_LAYER) && (flags & unsupported)) {
++				shader.set_variant_enabled(ShaderVersion::SHADER_VERSION_COLOR_PASS * 2 + flags, false);
++			}
++		}
++
+ 
+ 		if (RendererCompositorRD::get_singleton()->is_xr_enabled()) {
+ 			shader.enable_group(SHADER_GROUP_MULTIVIEW);
+@@ -859,6 +886,8 @@ void SceneShaderForwardClustered::init(const String p_defines) {
+ 		actions.usage_defines["POINT_SIZE"] = "#define POINT_SIZE_USED\n";
+ 		actions.usage_defines["POINT_COORD"] = "#define POINT_COORD_USED\n";
+ 
++		actions.render_mode_defines["depth_test_disabled"] = "#define DOF_LAYER_NO_DEPTH_TEST\n";
++
+ 		actions.render_mode_defines["skip_vertex_transform"] = "#define SKIP_TRANSFORM_USED\n";
+ 		actions.render_mode_defines["world_vertex_coords"] = "#define VERTEX_WORLD_COORDS_USED\n";
+ 		actions.render_mode_defines["ensure_correct_normals"] = "#define ENSURE_CORRECT_NORMALS\n";
+@@ -1020,6 +1049,14 @@ void SceneShaderForwardClustered::set_default_specialization(const ShaderSpecial
+ 	}
+ }
+ 
++void SceneShaderForwardClustered::enable_dof_world_layer_shader_group() {
++	if (!shader.is_group_enabled(SHADER_GROUP_DOF_WORLD_LAYER)) {
++		// The first visible WORLD object prepares this group for existing shader
++		// versions too. This one-time work can hitch; steady-state GPU cost is separate.
++		shader.enable_group(SHADER_GROUP_DOF_WORLD_LAYER);
++	}
++}
++
+ void SceneShaderForwardClustered::enable_multiview_shader_group() {
+ 	shader.enable_group(SHADER_GROUP_MULTIVIEW);
+ }
+diff --git a/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h b/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h
+index a9d7889..12fc7e0 100644
+--- a/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h
++++ b/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h
+@@ -48,6 +48,7 @@ public:
+ 		SHADER_GROUP_ADVANCED,
+ 		SHADER_GROUP_MULTIVIEW,
+ 		SHADER_GROUP_ADVANCED_MULTIVIEW,
++		SHADER_GROUP_DOF_WORLD_LAYER, // Prepared only when opt-in world alpha is visible.
+ 	};
+ 
+ 	// Not an enum because these values are constants that are processed as numbers
+@@ -71,7 +72,8 @@ public:
+ 		SHADER_COLOR_PASS_FLAG_LIGHTMAP = 1 << 2,
+ 		SHADER_COLOR_PASS_FLAG_MULTIVIEW = 1 << 3,
+ 		SHADER_COLOR_PASS_FLAG_MOTION_VECTORS = 1 << 4,
+-		SHADER_COLOR_PASS_FLAG_COUNT = 1 << 5
++		SHADER_COLOR_PASS_FLAG_DOF_WORLD_LAYER = 1 << 5,
++		SHADER_COLOR_PASS_FLAG_COUNT = 1 << 6
+ 	};
+ 
+ 	enum PipelineVersion {
+@@ -94,7 +96,8 @@ public:
+ 		PIPELINE_COLOR_PASS_FLAG_LIGHTMAP = 1 << 2,
+ 		PIPELINE_COLOR_PASS_FLAG_MULTIVIEW = 1 << 3,
+ 		PIPELINE_COLOR_PASS_FLAG_MOTION_VECTORS = 1 << 4,
+-		PIPELINE_COLOR_PASS_FLAG_OPTIONS = 5,
++		PIPELINE_COLOR_PASS_FLAG_DOF_WORLD_LAYER = 1 << 5,
++		PIPELINE_COLOR_PASS_FLAG_OPTIONS = 6,
+ 		PIPELINE_COLOR_PASS_FLAG_COMBINATIONS = 1 << PIPELINE_COLOR_PASS_FLAG_OPTIONS,
+ 	};
+ 
+@@ -240,6 +243,7 @@ public:
+ 
+ 		bool uses_point_size = false;
+ 		bool uses_alpha = false;
++		bool uses_custom_depth = false;
+ 		bool uses_blend_alpha = false;
+ 		bool uses_alpha_clip = false;
+ 		bool uses_alpha_antialiasing = false;
+@@ -380,6 +384,7 @@ public:
+ 
+ 	void init(const String p_defines);
+ 	void set_default_specialization(const ShaderSpecialization &p_specialization);
++	void enable_dof_world_layer_shader_group();
+ 	void enable_multiview_shader_group();
+ 	void enable_advanced_shader_group(bool p_needs_multiview = false);
+ 	bool is_multiview_shader_group_enabled() const;
+diff --git a/servers/rendering/renderer_rd/renderer_scene_render_rd.cpp b/servers/rendering/renderer_rd/renderer_scene_render_rd.cpp
+index fb4d422..b778b9a 100644
+--- a/servers/rendering/renderer_rd/renderer_scene_render_rd.cpp
++++ b/servers/rendering/renderer_rd/renderer_scene_render_rd.cpp
+@@ -551,6 +551,10 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
+ 		RD::get_singleton()->draw_command_end_label();
+ 	}
+ 
++	// Explicitly selected geometry is absent from the input color/depth above.
++	// Draw exactly once in scene-linear HDR, even when DOF is disabled.
++	_render_buffers_dof_exempt(p_render_data);
++
+ 	float auto_exposure_scale = 1.0;
+ 
+ 	if (can_use_effects && RSG::camera_attributes->camera_attributes_uses_auto_exposure(p_render_data->camera_attributes)) {
+diff --git a/servers/rendering/renderer_rd/renderer_scene_render_rd.h b/servers/rendering/renderer_rd/renderer_scene_render_rd.h
+index 5c13984..988fc0f 100644
+--- a/servers/rendering/renderer_rd/renderer_scene_render_rd.h
++++ b/servers/rendering/renderer_rd/renderer_scene_render_rd.h
+@@ -113,6 +113,7 @@ protected:
+ 	void _render_buffers_ensure_depth_texture(const RenderDataRD *p_render_data);
+ 	void _render_buffers_copy_depth_texture(const RenderDataRD *p_render_data, bool p_use_msaa = false);
+ 	void _render_buffers_post_process_and_tonemap(const RenderDataRD *p_render_data, bool p_use_msaa = false);
++	virtual void _render_buffers_dof_exempt(const RenderDataRD *p_render_data) {}
+ 	void _post_process_subpass(RID p_source_texture, RID p_framebuffer, const RenderDataRD *p_render_data);
+ 	void _disable_clear_request(const RenderDataRD *p_render_data);
+ 
+diff --git a/servers/rendering/renderer_rd/shader_rd.cpp b/servers/rendering/renderer_rd/shader_rd.cpp
+index a9739f2..93b0fc7 100644
+--- a/servers/rendering/renderer_rd/shader_rd.cpp
++++ b/servers/rendering/renderer_rd/shader_rd.cpp
+@@ -704,6 +704,9 @@ void ShaderRD::_allocate_placeholders(Version *p_version, int p_group) {
+ 
+ 	for (uint32_t i = 0; i < group_to_variant_map[p_group].size(); i++) {
+ 		int variant_id = group_to_variant_map[p_group][i];
++		if (!variants_enabled[variant_id]) {
++			continue; // Disabled variants never need placeholders or compiled RIDs.
++		}
+ 		RID shader = RD::get_singleton()->shader_create_placeholder();
+ 		{
+ 			p_version->variants.write[variant_id] = shader;
+diff --git a/servers/rendering/renderer_rd/shaders/effects/bokeh_dof.glsl b/servers/rendering/renderer_rd/shaders/effects/bokeh_dof.glsl
+index 48c1b0a..b7c4668 100644
+--- a/servers/rendering/renderer_rd/shaders/effects/bokeh_dof.glsl
++++ b/servers/rendering/renderer_rd/shaders/effects/bokeh_dof.glsl
+@@ -11,6 +11,10 @@ layout(local_size_x = BLOCK_SIZE, local_size_y = BLOCK_SIZE, local_size_z = 1) i
+ #ifdef MODE_GEN_BLUR_SIZE
+ layout(rgba16f, set = 0, binding = 0) uniform restrict image2D color_image;
+ layout(set = 1, binding = 0) uniform sampler2D source_depth;
++// Native response endpoints: two vec4-sized groups (eight contiguous floats).
++layout(set = 2, binding = 0, std430) restrict readonly buffer DofResponses {
++	float values[];
++} dof_responses;
+ #endif
+ 
+ #if defined(MODE_BOKEH_BOX) || defined(MODE_BOKEH_HEXAGONAL) || defined(MODE_BOKEH_CIRCULAR)
+@@ -21,13 +25,17 @@ layout(rgba16f, set = 0, binding = 0) uniform restrict writeonly image2D bokeh_i
+ #ifdef MODE_COMPOSITE_BOKEH
+ layout(rgba16f, set = 0, binding = 0) uniform restrict image2D color_image;
+ layout(set = 1, binding = 0) uniform sampler2D source_bokeh;
++layout(set = 2, binding = 0) uniform sampler2D source_depth;
++layout(set = 3, binding = 0, std430) restrict readonly buffer DofResponses {
++	float values[];
++} dof_responses;
+ #endif
+ 
+ // based on https://www.shadertoy.com/view/Xd3GDl
+ 
+ #include "bokeh_dof_inc.glsl"
+ 
+-#ifdef MODE_GEN_BLUR_SIZE
++#if defined(MODE_GEN_BLUR_SIZE) || defined(MODE_COMPOSITE_BOKEH)
+ 
+ float get_depth_at_pos(vec2 uv) {
+ 	float depth = textureLod(source_depth, uv, 0.0).x * 2.0 - 1.0;
+@@ -39,7 +47,38 @@ float get_depth_at_pos(vec2 uv) {
+ 	return depth;
+ }
+ 
++float endpoint_blur_size(float depth, uint offset) {
++	float near_begin = dof_responses.values[offset + 4u];
++	float far_begin = dof_responses.values[offset + 1u];
++	float radius = dof_responses.values[offset + 6u] * 64.0;
++	if (dof_responses.values[offset + 3u] > 0.5 && depth < near_begin) {
++		float transition = dof_responses.values[offset + 5u];
++		if (transition < 0.0) {
++			float d = abs(near_begin - depth);
++			return -(d / (near_begin - d)) * radius - DEPTH_GAP;
++		}
++		return -(1.0 - smoothstep(near_begin - transition, near_begin, depth)) * radius - DEPTH_GAP;
++	}
++	if (dof_responses.values[offset] > 0.5 && depth > far_begin) {
++		float transition = dof_responses.values[offset + 2u];
++		if (transition < 0.0) {
++			float d = abs(far_begin - depth);
++			return (d / (far_begin + d)) * radius + DEPTH_GAP;
++		}
++		return smoothstep(far_begin, far_begin + transition, depth) * radius + DEPTH_GAP;
++	}
++	return 0.0;
++}
++
+ float get_blur_size(float depth) {
++	if (params.response_count > 0u) {
++		float radius = 0.0;
++		for (uint i = 0u; i < params.response_count; i++) {
++			uint offset = i * 8u;
++			radius += endpoint_blur_size(depth, offset) * dof_responses.values[offset + 7u];
++		}
++		return radius;
++	}
+ 	if (params.blur_near_active && depth < params.blur_near_begin) {
+ 		if (params.use_physical_near) {
+ 			// Physically-based.
+@@ -72,16 +111,18 @@ float get_blur_size(float depth) {
+ vec4 weighted_filter_dir(vec2 dir, vec2 uv, vec2 pixel_size) {
+ 	dir *= pixel_size;
+ 	vec4 color = texture(color_texture, uv);
+-
+ 	vec4 accum = color;
+ 	float total = 1.0;
+-
++	bool reconstruct_far = color.a > 0.0;
++	vec3 far_rgb = color.rgb;
++	float far_weight = 1.0;
++	vec3 near_rgb = vec3(0.0);
++	float near_weight = 0.0;
+ 	float blur_scale = params.blur_size / float(params.blur_steps);
+ 
+ 	if (params.use_jitter) {
+ 		uv += dir * (hash12n(uv + params.jitter_seed) - 0.5);
+ 	}
+-
+ 	for (int i = -params.blur_steps; i <= params.blur_steps; i++) {
+ 		if (i == 0) {
+ 			continue;
+@@ -89,26 +130,48 @@ vec4 weighted_filter_dir(vec2 dir, vec2 uv, vec2 pixel_size) {
+ 		float radius = float(i) * blur_scale;
+ 		vec2 suv = uv + dir * radius;
+ 		radius = abs(radius);
+-
+ 		vec4 sample_color = texture(color_texture, suv);
+-		float limit;
+-
+-		if (sample_color.a < color.a) {
+-			limit = abs(sample_color.a);
+-		} else {
+-			limit = abs(color.a);
+-		}
+-
+-		limit -= DEPTH_GAP;
+-
++		float limit = (sample_color.a < color.a ? abs(sample_color.a) : abs(color.a)) - DEPTH_GAP;
+ 		float m = smoothstep(radius - 0.5, radius + 0.5, limit);
+-
++		// Preserve the signed CoC propagation and non-far-center behavior.
+ 		accum += mix(color, sample_color, m);
+-
++		if (reconstruct_far) {
++			if (sample_color.a < 0.0) {
++				near_rgb += sample_color.rgb * m;
++				near_weight += m;
++			} else {
++				// Interpolating clear/far RGB before testing CoC admits sharp color.
++				// Gather only alpha first; fetch RGB corners only at that boundary.
++				vec4 alpha = textureGather(color_texture, suv, 3);
++				float minimum = min(min(alpha.x, alpha.y), min(alpha.z, alpha.w));
++				float maximum = max(max(alpha.x, alpha.y), max(alpha.z, alpha.w));
++				if (minimum == 0.0 && maximum > 0.0) {
++					ivec2 source_size = textureSize(color_texture, 0);
++					vec2 sample_pos = suv * vec2(source_size) - 0.5;
++					ivec2 base = ivec2(floor(sample_pos));
++					vec2 fraction = fract(sample_pos);
++					for (int j = 0; j < 4; j++) {
++						vec4 corner = texelFetch(color_texture, clamp(base + ivec2(j & 1, j >> 1), ivec2(0), source_size - 1), 0);
++						float b = ((j & 1) == 0 ? 1.0 - fraction.x : fraction.x) * ((j >> 1) == 0 ? 1.0 - fraction.y : fraction.y);
++						float corner_m = smoothstep(radius - 0.5, radius + 0.5, min(color.a, corner.a) - DEPTH_GAP);
++						far_rgb += corner.rgb * (b * corner_m);
++						far_weight += b * corner_m;
++					}
++				} else {
++					far_rgb += sample_color.rgb * m;
++					far_weight += m;
++				}
++			}
++		}
+ 		total += 1.0;
+ 	}
+-
+-	return accum / total;
++	vec4 result = accum / total;
++	if (reconstruct_far) {
++		// Normalize far reconstruction, retaining near foreground coverage m/N.
++		// The center contributes one, so far_weight is always positive.
++		result.rgb = (1.0 - near_weight / total) * (far_rgb / far_weight) + near_rgb / total;
++	}
++	return result;
+ }
+ 
+ #endif
+@@ -214,6 +277,51 @@ void main() {
+ 	uv += pixel_size * 0.5;
+ 	vec4 color = imageLoad(color_image, pos);
+ 	vec4 bokeh = texture(source_bokeh, uv);
++	if (color.a > 0.0) {
++		ivec2 low_size = textureSize(source_bokeh, 0);
++		ivec2 full_size = textureSize(source_depth, 0);
++		vec2 low_pos = uv * vec2(low_size) - 0.5;
++		ivec2 low_base = ivec2(floor(low_pos));
++		vec2 blend = fract(low_pos);
++		float center_reverse_depth = texelFetch(source_depth, pos, 0).r;
++		vec3 near_rgb = vec3(0.0);
++		float near_weight = 0.0;
++		vec3 far_rgb = vec3(0.0);
++		float far_weight = 0.0;
++		bool rejected_clear = false;
++		for (int y = 0; y < 2; y++) {
++			for (int x = 0; x < 2; x++) {
++				ivec2 tap_pos = clamp(low_base + ivec2(x, y), ivec2(0), low_size - 1);
++				vec4 tap = texelFetch(source_bokeh, tap_pos, 0);
++				float w = (x == 0 ? 1.0 - blend.x : blend.x) * (y == 0 ? 1.0 - blend.y : blend.y);
++				// Match pass1's normalized (tap + 0.25) / half_size, including odd sizes.
++				ivec2 source_pos = clamp(ivec2(floor((vec2(tap_pos) + 0.25) * vec2(full_size) / vec2(low_size))), ivec2(0), full_size - 1);
++				float reverse_depth = texelFetch(source_depth, source_pos, 0).r;
++				float depth = reverse_depth * 2.0 - 1.0;
++				if (params.orthogonal) {
++					depth = -(depth * (params.z_far - params.z_near) - (params.z_far + params.z_near)) / 2.0;
++				} else {
++					depth = 2.0 * params.z_near * params.z_far / (params.z_far + params.z_near + depth * (params.z_far - params.z_near));
++				}
++				float raw_coc = get_blur_size(depth);
++				if (tap.a < 0.0 || raw_coc < 0.0) {
++					// Keep near contributions at their original bilinear coverage.
++					near_rgb += w * tap.rgb;
++					near_weight += w;
++				} else if (!(raw_coc == 0.0 && reverse_depth > center_reverse_depth)) {
++					// Reject only a closer, exactly clear-zone source, never a depth gradient.
++					far_rgb += w * tap.rgb;
++					far_weight += w;
++				} else if (w > 0.0) {
++					rejected_clear = true;
++				}
++			}
++		}
++		if (rejected_clear && far_weight > 0.0) {
++			bokeh.rgb = near_rgb + (1.0 - near_weight) * (far_rgb / far_weight);
++		}
++		// Leave old bilinear alpha and composite mix_amount unchanged.
++	}
+ 
+ 	float mix_amount;
+ 	if (bokeh.a < color.a) {
+diff --git a/servers/rendering/renderer_rd/shaders/effects/bokeh_dof_inc.glsl b/servers/rendering/renderer_rd/shaders/effects/bokeh_dof_inc.glsl
+index 4a2b0ed..be17e82 100644
+--- a/servers/rendering/renderer_rd/shaders/effects/bokeh_dof_inc.glsl
++++ b/servers/rendering/renderer_rd/shaders/effects/bokeh_dof_inc.glsl
+@@ -25,7 +25,8 @@ layout(push_constant, std430) uniform Params {
+ 
+ 	float blur_size_near;
+ 	float blur_size_far;
+-	uint pad[2];
++	uint response_count;
++	uint pad;
+ }
+ params;
+ 
+diff --git a/servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl b/servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl
+index 431f480..cceec74 100644
+--- a/servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl
++++ b/servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl
+@@ -1063,6 +1063,9 @@ layout(location = 1) out vec4 specular_buffer; //specular and SSS (subsurface sc
+ #else
+ 
+ layout(location = 0) out vec4 frag_color;
++#if defined(MODE_DOF_WORLD_LAYER) && !defined(MODE_SEPARATE_SPECULAR)
++layout(location = 1) out vec4 dof_layer_depth;
++#endif
+ #endif // MODE_SEPARATE_SPECULAR
+ 
+ #endif // RENDER DEPTH
+@@ -3099,6 +3102,19 @@ void fragment_shader(in SceneData scene_data) {
+ 	frag_color.rgb *= premul_alpha;
+ #endif //PREMUL_ALPHA_USED
+ 
++#ifdef MODE_DOF_WORLD_LAYER
++	// Straight alpha at the shader output, premultiplied by MRT blend.
++	// Reconstruct geometry depth rather than a material LIGHT_VERTEX override.
++	// Materials writing custom DEPTH are rejected by this layer.
++	vec4 layer_view = inv_projection_matrix * vec4(screen_uv * 2.0 - 1.0, gl_FragCoord.z, 1.0);
++	float layer_depth = -layer_view.z / layer_view.w;
++#ifdef DOF_LAYER_NO_DEPTH_TEST
++	dof_layer_depth = vec4(layer_depth, 1.0, 0.0, alpha);
++#else
++	dof_layer_depth = vec4(layer_depth, 0.0, 0.0, alpha);
++#endif
++#endif
++
+ #endif //MODE_SEPARATE_SPECULAR
+ 
+ #endif //MODE_RENDER_DEPTH
+diff --git a/servers/rendering/renderer_scene_cull.cpp b/servers/rendering/renderer_scene_cull.cpp
+index 26a7879..519430b 100644
+--- a/servers/rendering/renderer_scene_cull.cpp
++++ b/servers/rendering/renderer_scene_cull.cpp
+@@ -734,6 +734,8 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
+ 				geom->geometry_instance->set_pivot_data(instance->sorting_offset, instance->use_aabb_center);
+ 				geom->geometry_instance->set_lod_bias(instance->lod_bias);
+ 				geom->geometry_instance->set_transparency(instance->transparency);
++				geom->geometry_instance->set_dof_exempt(instance->dof_exempt);
++				geom->geometry_instance->set_dof_world_layer(instance->dof_world_layer);
+ 				geom->geometry_instance->set_use_baked_light(instance->baked_light);
+ 				geom->geometry_instance->set_use_dynamic_gi(instance->dynamic_gi);
+ 				geom->geometry_instance->set_use_lightmap(RID(), instance->lightmap_uv_scale, instance->lightmap_slice_index);
+@@ -972,6 +974,28 @@ void RendererSceneCull::instance_set_pivot_data(RID p_instance, float p_sorting_
+ 	}
+ }
+ 
++void RendererSceneCull::instance_geometry_set_dof_exempt(RID p_instance, bool p_enabled) {
++	Instance *instance = instance_owner.get_or_null(p_instance);
++	ERR_FAIL_NULL(instance);
++	instance->dof_exempt = p_enabled;
++	if ((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK && instance->base_data) {
++		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
++		ERR_FAIL_NULL(geom->geometry_instance);
++		geom->geometry_instance->set_dof_exempt(p_enabled);
++	}
++}
++
++void RendererSceneCull::instance_geometry_set_dof_world_layer(RID p_instance, bool p_enabled) {
++	Instance *instance = instance_owner.get_or_null(p_instance);
++	ERR_FAIL_NULL(instance);
++	instance->dof_world_layer = p_enabled;
++	if ((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK && instance->base_data) {
++		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
++		ERR_FAIL_NULL(geom->geometry_instance);
++		geom->geometry_instance->set_dof_world_layer(p_enabled);
++	}
++}
++
+ void RendererSceneCull::instance_geometry_set_transparency(RID p_instance, float p_transparency) {
+ 	Instance *instance = instance_owner.get_or_null(p_instance);
+ 	ERR_FAIL_NULL(instance);
+diff --git a/servers/rendering/renderer_scene_cull.h b/servers/rendering/renderer_scene_cull.h
+index 6d92798..f25476c 100644
+--- a/servers/rendering/renderer_scene_cull.h
++++ b/servers/rendering/renderer_scene_cull.h
+@@ -458,6 +458,8 @@ public:
+ 		HashSet<Instance *> visibility_dependencies;
+ 		uint32_t visibility_dependencies_depth = 0;
+ 		float transparency = 0.0f;
++		bool dof_exempt = false;
++		bool dof_world_layer = false;
+ 		Scenario *scenario = nullptr;
+ 		SelfList<Instance> scenario_item;
+ 
+@@ -1034,6 +1036,8 @@ public:
+ 	virtual void instance_set_surface_override_material(RID p_instance, int p_surface, RID p_material);
+ 	virtual void instance_set_visible(RID p_instance, bool p_visible);
+ 	virtual void instance_geometry_set_transparency(RID p_instance, float p_transparency);
++	virtual void instance_geometry_set_dof_exempt(RID p_instance, bool p_enabled);
++	virtual void instance_geometry_set_dof_world_layer(RID p_instance, bool p_enabled);
+ 
+ 	virtual void instance_teleport(RID p_instance);
+ 
+diff --git a/servers/rendering/rendering_method.h b/servers/rendering/rendering_method.h
+index c06adc8..b1e534d 100644
+--- a/servers/rendering/rendering_method.h
++++ b/servers/rendering/rendering_method.h
+@@ -91,6 +91,8 @@ public:
+ 	virtual void instance_set_surface_override_material(RID p_instance, int p_surface, RID p_material) = 0;
+ 	virtual void instance_set_visible(RID p_instance, bool p_visible) = 0;
+ 	virtual void instance_geometry_set_transparency(RID p_instance, float p_transparency) = 0;
++	virtual void instance_geometry_set_dof_exempt(RID p_instance, bool p_enabled) = 0;
++	virtual void instance_geometry_set_dof_world_layer(RID p_instance, bool p_enabled) = 0;
+ 
+ 	virtual void instance_teleport(RID p_instance) = 0;
+ 
+diff --git a/servers/rendering/rendering_server.cpp b/servers/rendering/rendering_server.cpp
+index d2b235f..cd46ff4 100644
+--- a/servers/rendering/rendering_server.cpp
++++ b/servers/rendering/rendering_server.cpp
+@@ -3187,6 +3187,7 @@ void RenderingServer::_bind_methods() {
+ 	ClassDB::bind_method(D_METHOD("camera_attributes_set_dof_blur_bokeh_shape", "shape"), &RenderingServer::camera_attributes_set_dof_blur_bokeh_shape);
+ 
+ 	ClassDB::bind_method(D_METHOD("camera_attributes_set_dof_blur", "camera_attributes", "far_enable", "far_distance", "far_transition", "near_enable", "near_distance", "near_transition", "amount"), &RenderingServer::camera_attributes_set_dof_blur);
++	ClassDB::bind_method(D_METHOD("camera_attributes_set_dof_responses", "camera_attributes", "responses"), &RenderingServer::camera_attributes_set_dof_responses);
+ 	ClassDB::bind_method(D_METHOD("camera_attributes_set_exposure", "camera_attributes", "multiplier", "normalization"), &RenderingServer::camera_attributes_set_exposure);
+ 	ClassDB::bind_method(D_METHOD("camera_attributes_set_auto_exposure", "camera_attributes", "enable", "min_sensitivity", "max_sensitivity", "speed", "scale"), &RenderingServer::camera_attributes_set_auto_exposure);
+ 
+@@ -3221,6 +3222,8 @@ void RenderingServer::_bind_methods() {
+ 	ClassDB::bind_method(D_METHOD("instance_set_surface_override_material", "instance", "surface", "material"), &RenderingServer::instance_set_surface_override_material);
+ 	ClassDB::bind_method(D_METHOD("instance_set_visible", "instance", "visible"), &RenderingServer::instance_set_visible);
+ 	ClassDB::bind_method(D_METHOD("instance_geometry_set_transparency", "instance", "transparency"), &RenderingServer::instance_geometry_set_transparency);
++	ClassDB::bind_method(D_METHOD("instance_geometry_set_dof_exempt", "instance", "enabled"), &RenderingServer::instance_geometry_set_dof_exempt);
++	ClassDB::bind_method(D_METHOD("instance_geometry_set_dof_world_layer", "instance", "enabled"), &RenderingServer::instance_geometry_set_dof_world_layer);
+ 
+ 	ClassDB::bind_method(D_METHOD("instance_teleport", "instance"), &RenderingServer::instance_teleport);
+ 
+diff --git a/servers/rendering/rendering_server.h b/servers/rendering/rendering_server.h
+index 4a5f852..15d8608 100644
+--- a/servers/rendering/rendering_server.h
++++ b/servers/rendering/rendering_server.h
+@@ -707,6 +707,7 @@ public:
+ 	virtual void camera_attributes_set_dof_blur_bokeh_shape(RSE::DOFBokehShape p_shape) = 0;
+ 
+ 	virtual void camera_attributes_set_dof_blur(RID p_camera_attributes, bool p_far_enable, float p_far_distance, float p_far_transition, bool p_near_enable, float p_near_distance, float p_near_transition, float p_amount) = 0;
++	virtual void camera_attributes_set_dof_responses(RID p_camera_attributes, const Vector<float> &p_responses) = 0;
+ 	virtual void camera_attributes_set_exposure(RID p_camera_attributes, float p_multiplier, float p_exposure_normalization) = 0;
+ 	virtual void camera_attributes_set_auto_exposure(RID p_camera_attributes, bool p_enable, float p_min_sensitivity, float p_max_sensitivity, float p_speed, float p_scale) = 0;
+ 
+@@ -763,6 +764,8 @@ public:
+ 	virtual void instance_geometry_set_lightmap(RID p_instance, RID p_lightmap, const Rect2 &p_lightmap_uv_scale, int p_lightmap_slice) = 0;
+ 	virtual void instance_geometry_set_lod_bias(RID p_instance, float p_lod_bias) = 0;
+ 	virtual void instance_geometry_set_transparency(RID p_instance, float p_transparency) = 0;
++	virtual void instance_geometry_set_dof_exempt(RID p_instance, bool p_enabled) = 0;
++	virtual void instance_geometry_set_dof_world_layer(RID p_instance, bool p_enabled) = 0;
+ 
+ 	virtual void instance_geometry_set_shader_parameter(RID p_instance, const StringName &, const Variant &p_value) = 0;
+ 	virtual Variant instance_geometry_get_shader_parameter(RID p_instance, const StringName &) const = 0;
+diff --git a/servers/rendering/rendering_server_default.h b/servers/rendering/rendering_server_default.h
+index 30d52d8..e6194b3 100644
+--- a/servers/rendering/rendering_server_default.h
++++ b/servers/rendering/rendering_server_default.h
+@@ -913,6 +913,7 @@ public:
+ 	FUNC1(camera_attributes_set_dof_blur_bokeh_shape, RSE::DOFBokehShape)
+ 
+ 	FUNC8(camera_attributes_set_dof_blur, RID, bool, float, float, bool, float, float, float)
++	FUNC2(camera_attributes_set_dof_responses, RID, const Vector<float> &)
+ 	FUNC3(camera_attributes_set_exposure, RID, float, float)
+ 	FUNC6(camera_attributes_set_auto_exposure, RID, bool, float, float, float, float)
+ 
+@@ -969,6 +970,8 @@ public:
+ 	FUNC4(instance_geometry_set_lightmap, RID, RID, const Rect2 &, int)
+ 	FUNC2(instance_geometry_set_lod_bias, RID, float)
+ 	FUNC2(instance_geometry_set_transparency, RID, float)
++	FUNC2(instance_geometry_set_dof_exempt, RID, bool)
++	FUNC2(instance_geometry_set_dof_world_layer, RID, bool)
+ 	FUNC3(instance_geometry_set_shader_parameter, RID, const StringName &, const Variant &)
+ 	FUNC2RC(Variant, instance_geometry_get_shader_parameter, RID, const StringName &)
+ 	FUNC2RC(Variant, instance_geometry_get_shader_parameter_default_value, RID, const StringName &)
+diff --git a/servers/rendering/storage/camera_attributes_storage.cpp b/servers/rendering/storage/camera_attributes_storage.cpp
+index a8f0057..b612218 100644
+--- a/servers/rendering/storage/camera_attributes_storage.cpp
++++ b/servers/rendering/storage/camera_attributes_storage.cpp
+@@ -30,9 +30,8 @@
+ 
+ #include "camera_attributes_storage.h"
+ 
+-#ifdef DEBUG_ENABLED
++#include "core/math/math_funcs.h"
+ #include "core/os/os.h"
+-#endif
+ 
+ RendererCameraAttributes *RendererCameraAttributes::singleton = nullptr;
+ uint64_t RendererCameraAttributes::auto_exposure_counter = 2;
+@@ -85,6 +84,43 @@ void RendererCameraAttributes::camera_attributes_set_dof_blur(RID p_camera_attri
+ 	cam_attributes->dof_blur_amount = p_amount;
+ }
+ 
++// Each endpoint contains far enabled/distance/transition, near enabled/distance/
++// transition, native blur amount, weight. All distances are metres; negative
++// transition selects the stock physical response. Empty input restores stock DOF.
++void RendererCameraAttributes::camera_attributes_set_dof_responses(RID p_camera_attributes, const Vector<float> &p_responses) {
++	CameraAttributes *cam_attributes = camera_attributes_owner.get_or_null(p_camera_attributes);
++	ERR_FAIL_NULL(cam_attributes);
++	ERR_FAIL_COND_MSG(!p_responses.is_empty() && OS::get_singleton()->get_current_rendering_method() != "forward_plus", "DOF response blending is supported only by the Forward+ renderer.");
++	ERR_FAIL_COND_MSG(p_responses.size() % 8 != 0, "DOF responses must contain eight floats per endpoint.");
++	float total_weight = 0.0f;
++	bool uses_dof = false;
++	for (int i = 0; i < p_responses.size(); i += 8) {
++		for (int j = 0; j < 8; j++) {
++			ERR_FAIL_COND_MSG(!Math::is_finite(p_responses[i + j]), "DOF response parameters must be finite.");
++		}
++		ERR_FAIL_COND_MSG(p_responses[i + 1] <= 0.0f || p_responses[i + 4] <= 0.0f, "DOF endpoint distances must be positive.");
++		ERR_FAIL_COND_MSG(p_responses[i + 2] == 0.0f || p_responses[i + 5] == 0.0f, "DOF transitions must be positive (artistic) or negative (physical).");
++		ERR_FAIL_COND_MSG(p_responses[i + 6] < 0.0f || p_responses[i + 7] < 0.0f, "DOF amount and weight cannot be negative.");
++		total_weight += p_responses[i + 7];
++		uses_dof |= p_responses[i + 7] > 0.0f && p_responses[i + 6] > 0.0f && (p_responses[i] > 0.5f || p_responses[i + 3] > 0.5f);
++	}
++	ERR_FAIL_COND_MSG(!p_responses.is_empty() && (!Math::is_finite(total_weight) || total_weight <= 0.0f), "DOF endpoint weights must have a finite positive sum.");
++	cam_attributes->dof_responses = p_responses;
++	if (!p_responses.is_empty()) {
++		float *data = cam_attributes->dof_responses.ptrw();
++		for (int i = 7; i < p_responses.size(); i += 8) {
++			data[i] /= total_weight;
++		}
++	}
++	cam_attributes->dof_responses_uses_dof = uses_dof;
++}
++
++Vector<float> RendererCameraAttributes::camera_attributes_get_dof_responses(RID p_camera_attributes) const {
++	const CameraAttributes *cam_attributes = camera_attributes_owner.get_or_null(p_camera_attributes);
++	ERR_FAIL_NULL_V(cam_attributes, Vector<float>());
++	return cam_attributes->dof_responses;
++}
++
+ bool RendererCameraAttributes::camera_attributes_get_dof_far_enabled(RID p_camera_attributes) {
+ 	CameraAttributes *cam_attributes = camera_attributes_owner.get_or_null(p_camera_attributes);
+ 	ERR_FAIL_NULL_V(cam_attributes, false);
+diff --git a/servers/rendering/storage/camera_attributes_storage.h b/servers/rendering/storage/camera_attributes_storage.h
+index e8afd98..3a2c03e 100644
+--- a/servers/rendering/storage/camera_attributes_storage.h
++++ b/servers/rendering/storage/camera_attributes_storage.h
+@@ -31,6 +31,7 @@
+ #pragma once
+ 
+ #include "core/templates/rid_owner.h"
++#include "core/templates/vector.h"
+ #include "servers/rendering/rendering_server_enums.h"
+ 
+ class RendererCameraAttributes {
+@@ -56,6 +57,8 @@ private:
+ 		float dof_blur_near_distance = 2;
+ 		float dof_blur_near_transition = 1;
+ 		float dof_blur_amount = 0.1;
++		Vector<float> dof_responses;
++		bool dof_responses_uses_dof = false;
+ 	};
+ 
+ 	RSE::DOFBlurQuality dof_blur_quality = RSE::DOF_BLUR_QUALITY_MEDIUM;
+@@ -82,6 +85,8 @@ public:
+ 	void camera_attributes_set_dof_blur_bokeh_shape(RSE::DOFBokehShape p_shape);
+ 
+ 	void camera_attributes_set_dof_blur(RID p_camera_attributes, bool p_far_enable, float p_far_distance, float p_far_transition, bool p_near_enable, float p_near_distance, float p_near_transition, float p_amount);
++	void camera_attributes_set_dof_responses(RID p_camera_attributes, const Vector<float> &p_responses);
++	Vector<float> camera_attributes_get_dof_responses(RID p_camera_attributes) const;
+ 	bool camera_attributes_get_dof_far_enabled(RID p_camera_attributes);
+ 	float camera_attributes_get_dof_far_distance(RID p_camera_attributes);
+ 	float camera_attributes_get_dof_far_transition(RID p_camera_attributes);
+@@ -93,7 +98,13 @@ public:
+ 	_FORCE_INLINE_ bool camera_attributes_uses_dof(RID p_camera_attributes) {
+ 		CameraAttributes *cam_attributes = camera_attributes_owner.get_or_null(p_camera_attributes);
+ 
+-		return cam_attributes && (cam_attributes->dof_blur_near_enabled || cam_attributes->dof_blur_far_enabled) && cam_attributes->dof_blur_amount > 0.0;
++		if (!cam_attributes) {
++			return false;
++		}
++		if (!cam_attributes->dof_responses.is_empty()) {
++			return cam_attributes->dof_responses_uses_dof;
++		}
++		return (cam_attributes->dof_blur_near_enabled || cam_attributes->dof_blur_far_enabled) && cam_attributes->dof_blur_amount > 0.0;
+ 	}
+ 
+ 	void camera_attributes_set_exposure(RID p_camera_attributes, float p_multiplier, float p_exposure_normalization);
+--- /dev/null
++++ b/servers/rendering/renderer_rd/effects/world_dof.cpp
+@@ -0,0 +1,158 @@
++/**************************************************************************/
++/*  world_dof.cpp                                                                 */
++/**************************************************************************/
++/*                         This file is part of:                          */
++/*                             GODOT ENGINE                               */
++/*                        https://godotengine.org                         */
++/**************************************************************************/
++/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
++/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
++/*                                                                        */
++/* Permission is hereby granted, free of charge, to any person obtaining  */
++/* a copy of this software and associated documentation files (the        */
++/* "Software"), to deal in the Software without restriction, including    */
++/* without limitation the rights to use, copy, modify, merge, publish,    */
++/* distribute, sublicense, and/or sell copies of the Software, and to     */
++/* permit persons to whom the Software is furnished to do so, subject to  */
++/* the following conditions:                                              */
++/*                                                                        */
++/* The above copyright notice and this permission notice shall be         */
++/* included in all copies or substantial portions of the Software.        */
++/*                                                                        */
++/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
++/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
++/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
++/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
++/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
++/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
++/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
++/**************************************************************************/
++
++#include "world_dof.h"
++
++#include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
++#include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
++#include "servers/rendering/rendering_server_globals.h"
++#include "servers/rendering/storage/camera_attributes_storage.h"
++
++using namespace RendererRD;
++
++WorldDOF::WorldDOF() {
++	Vector<String> modes = { "\n#define HORIZONTAL\n", "\n#define COMPOSITE\n", "\n#define DIRECT_COMPOSITE\n" };
++	shader.initialize(modes);
++	version = shader.version_create();
++	for (int i = 0; i < 3; i++) {
++		pipelines[i].create_compute_pipeline(shader.version_get_shader(version, i));
++	}
++}
++
++WorldDOF::~WorldDOF() {
++	for (int i = 0; i < 3; i++) {
++		pipelines[i].free();
++	}
++	shader.version_free(version);
++	if (response_buffer.is_valid()) {
++		RD::get_singleton()->free(response_buffer);
++	}
++}
++
++void WorldDOF::ensure_buffers(const Ref<RenderSceneBuffersRD> &p_buffers) {
++	if (p_buffers->has_texture(SNAME("WorldDOF"), SNAME("color"))) {
++		return;
++	}
++	uint32_t usage = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
++	for (const StringName &name : { SNAME("color"), SNAME("metadata"), SNAME("blur_color"), SNAME("blur_metadata") }) {
++		p_buffers->create_texture(SNAME("WorldDOF"), name, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, p_buffers->get_internal_size(), 1);
++	}
++}
++
++void WorldDOF::process(const Ref<RenderSceneBuffersRD> &p_buffers, RID p_camera_attributes, float p_z_near, float p_z_far, bool p_orthogonal, bool p_use_dof) {
++	if (!p_use_dof) {
++		// Native DOF is disabled: preserve exact coverage with a single center
++		// composite. No response upload, horizontal pass or blur sampling.
++		Size2i size = p_buffers->get_internal_size();
++		PushConstant pc = {};
++		pc.size[0] = size.x;
++		pc.size[1] = size.y;
++		RID shader_rid = shader.version_get_shader(version, 2);
++		RID sampler = MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
++		RD::Uniform source(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, { sampler, p_buffers->get_texture(SNAME("WorldDOF"), SNAME("color")) });
++		RD::Uniform output(RD::UNIFORM_TYPE_IMAGE, 0, { p_buffers->get_internal_texture() });
++		RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
++		RD::get_singleton()->compute_list_bind_compute_pipeline(list, pipelines[2].get_rid());
++		RD::get_singleton()->compute_list_bind_uniform_set(list, UniformSetCacheRD::get_singleton()->get_cache(shader_rid, 0, source), 0);
++		RD::get_singleton()->compute_list_bind_uniform_set(list, UniformSetCacheRD::get_singleton()->get_cache(shader_rid, 1, output), 1);
++		RD::get_singleton()->compute_list_set_push_constant(list, &pc, sizeof(pc));
++		RD::get_singleton()->compute_list_dispatch_threads(list, size.x, size.y, 1);
++		RD::get_singleton()->compute_list_end();
++		return;
++	}
++	Vector<float> responses;
++	if (p_camera_attributes.is_valid()) {
++		responses = RSG::camera_attributes->camera_attributes_get_dof_responses(p_camera_attributes);
++		if (responses.is_empty()) {
++			responses.resize(8);
++			responses.set(0, RSG::camera_attributes->camera_attributes_get_dof_far_enabled(p_camera_attributes));
++			responses.set(1, RSG::camera_attributes->camera_attributes_get_dof_far_distance(p_camera_attributes));
++			responses.set(2, RSG::camera_attributes->camera_attributes_get_dof_far_transition(p_camera_attributes));
++			responses.set(3, RSG::camera_attributes->camera_attributes_get_dof_near_enabled(p_camera_attributes));
++			responses.set(4, RSG::camera_attributes->camera_attributes_get_dof_near_distance(p_camera_attributes));
++			responses.set(5, RSG::camera_attributes->camera_attributes_get_dof_near_transition(p_camera_attributes));
++			responses.set(6, RSG::camera_attributes->camera_attributes_get_dof_blur_amount(p_camera_attributes));
++			responses.set(7, 1.0f);
++		}
++	}
++	uint32_t bytes = MAX(uint32_t(responses.size()) * uint32_t(sizeof(float)), uint32_t(8 * sizeof(float)));
++	if (bytes != response_bytes) {
++		if (response_buffer.is_valid()) {
++			RD::get_singleton()->free(response_buffer);
++		}
++		response_buffer = RD::get_singleton()->storage_buffer_create(bytes);
++		response_bytes = bytes;
++	}
++	if (!responses.is_empty()) {
++		RD::get_singleton()->buffer_update(response_buffer, 0, responses.size() * sizeof(float), responses.ptr());
++	}
++	Size2i size = p_buffers->get_internal_size();
++	PushConstant pc = {};
++	pc.size[0] = size.x;
++	pc.size[1] = size.y;
++	pc.z_near = p_z_near;
++	pc.z_far = p_z_far;
++	pc.response_count = responses.size() / 8;
++	pc.orthogonal = p_orthogonal;
++	// Matches native signed response units (full-resolution pixels), with a
++	// bounded soft-alpha filter. The kernel is separable tent, not native bokeh.
++	pc.max_radius = 32.0f;
++
++	MaterialStorage *materials = MaterialStorage::get_singleton();
++	RID sampler = materials->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
++	UniformSetCacheRD *cache = UniformSetCacheRD::get_singleton();
++	RID color = p_buffers->get_texture(SNAME("WorldDOF"), SNAME("color"));
++	RID metadata = p_buffers->get_texture(SNAME("WorldDOF"), SNAME("metadata"));
++	RID blur_color = p_buffers->get_texture(SNAME("WorldDOF"), SNAME("blur_color"));
++	RID blur_metadata = p_buffers->get_texture(SNAME("WorldDOF"), SNAME("blur_metadata"));
++	RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
++	for (int pass = 0; pass < 2; pass++) {
++		RID shader_rid = shader.version_get_shader(version, pass);
++		RD::Uniform u_color(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, { sampler, pass == 0 ? color : blur_color });
++		RD::Uniform u_metadata(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, { sampler, pass == 0 ? metadata : blur_metadata });
++		RD::Uniform u_depth(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, { sampler, p_buffers->get_depth_texture() });
++		RD::Uniform u_responses(RD::UNIFORM_TYPE_STORAGE_BUFFER, 3, { response_buffer });
++		RD::Uniform u_output(RD::UNIFORM_TYPE_IMAGE, 0, { pass == 0 ? blur_color : p_buffers->get_internal_texture() });
++		RD::get_singleton()->compute_list_bind_compute_pipeline(list, pipelines[pass].get_rid());
++		RD::get_singleton()->compute_list_bind_uniform_set(list, cache->get_cache(shader_rid, 0, u_color, u_metadata, u_depth, u_responses), 0);
++		if (pass == 0) {
++			RD::Uniform u_output_metadata(RD::UNIFORM_TYPE_IMAGE, 1, { blur_metadata });
++			RD::get_singleton()->compute_list_bind_uniform_set(list, cache->get_cache(shader_rid, 1, u_output, u_output_metadata), 1);
++		} else {
++			RD::get_singleton()->compute_list_bind_uniform_set(list, cache->get_cache(shader_rid, 1, u_output), 1);
++		}
++		RD::get_singleton()->compute_list_set_push_constant(list, &pc, sizeof(pc));
++		RD::get_singleton()->compute_list_dispatch_threads(list, size.x, size.y, 1);
++		if (pass == 0) {
++			RD::get_singleton()->compute_list_add_barrier(list);
++		}
++	}
++	RD::get_singleton()->compute_list_end();
++}
+--- /dev/null
++++ b/servers/rendering/renderer_rd/effects/world_dof.h
+@@ -0,0 +1,65 @@
++/**************************************************************************/
++/*  world_dof.h                                                                 */
++/**************************************************************************/
++/*                         This file is part of:                          */
++/*                             GODOT ENGINE                               */
++/*                        https://godotengine.org                         */
++/**************************************************************************/
++/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
++/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
++/*                                                                        */
++/* Permission is hereby granted, free of charge, to any person obtaining  */
++/* a copy of this software and associated documentation files (the        */
++/* "Software"), to deal in the Software without restriction, including    */
++/* without limitation the rights to use, copy, modify, merge, publish,    */
++/* distribute, sublicense, and/or sell copies of the Software, and to     */
++/* permit persons to whom the Software is furnished to do so, subject to  */
++/* the following conditions:                                              */
++/*                                                                        */
++/* The above copyright notice and this permission notice shall be         */
++/* included in all copies or substantial portions of the Software.        */
++/*                                                                        */
++/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
++/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
++/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
++/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
++/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
++/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
++/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
++/**************************************************************************/
++
++#pragma once
++
++#include "servers/rendering/renderer_rd/pipeline_deferred_rd.h"
++#include "servers/rendering/renderer_rd/shaders/effects/world_dof.glsl.gen.h"
++#include "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h"
++
++namespace RendererRD {
++
++// A single opt-in alpha layer. Metadata follows premultiplied coverage too.
++// ponytail: overlap uses a coverage-weighted depth; exact multilayer DOF needs
++// depth peeling/OIT and is outside this text/sprite layer's contract.
++class WorldDOF {
++	WorldDofShaderRD shader;
++	RID version;
++	PipelineDeferredRD pipelines[3];
++	RID response_buffer;
++	uint32_t response_bytes = 0;
++	struct PushConstant {
++		int32_t size[2];
++		float z_near;
++		float z_far;
++		uint32_t response_count;
++		uint32_t orthogonal;
++		float max_radius;
++		uint32_t pad;
++	};
++
++public:
++	WorldDOF();
++	~WorldDOF();
++	void ensure_buffers(const Ref<RenderSceneBuffersRD> &p_buffers);
++	void process(const Ref<RenderSceneBuffersRD> &p_buffers, RID p_camera_attributes, float p_z_near, float p_z_far, bool p_orthogonal, bool p_use_dof);
++};
++
++} // namespace RendererRD
+--- /dev/null
++++ b/servers/rendering/renderer_rd/shaders/effects/world_dof.glsl
+@@ -0,0 +1,124 @@
++#[compute]
++
++#version 450
++
++#VERSION_DEFINES
++
++layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
++layout(set = 0, binding = 0) uniform sampler2D source_color;
++#ifndef DIRECT_COMPOSITE
++layout(set = 0, binding = 1) uniform sampler2D source_metadata;
++layout(set = 0, binding = 2) uniform sampler2D scene_depth;
++layout(set = 0, binding = 3, std430) restrict readonly buffer DofResponses {
++	float values[];
++} dof_responses;
++#endif
++layout(rgba16f, set = 1, binding = 0) uniform restrict image2D output_color;
++#ifdef HORIZONTAL
++layout(rgba16f, set = 1, binding = 1) uniform restrict writeonly image2D output_metadata;
++#endif
++layout(push_constant, std430) uniform Params {
++	ivec2 size;
++	float z_near;
++	float z_far;
++	uint response_count;
++	uint orthogonal;
++	float max_radius;
++	uint pad;
++} params;
++
++#ifndef DIRECT_COMPOSITE
++float endpoint_blur_size(float depth, uint offset) {
++	float near_begin = dof_responses.values[offset + 4u];
++	float far_begin = dof_responses.values[offset + 1u];
++	float radius = dof_responses.values[offset + 6u] * 64.0;
++	if (dof_responses.values[offset + 3u] > 0.5 && depth < near_begin) {
++		float transition = dof_responses.values[offset + 5u];
++		if (transition < 0.0) {
++			float d = abs(near_begin - depth);
++			return -(d / (near_begin - d)) * radius;
++		}
++		return -(1.0 - smoothstep(near_begin - transition, near_begin, depth)) * radius;
++	}
++	if (dof_responses.values[offset] > 0.5 && depth > far_begin) {
++		float transition = dof_responses.values[offset + 2u];
++		if (transition < 0.0) {
++			float d = abs(far_begin - depth);
++			return (d / (far_begin + d)) * radius;
++		}
++		return smoothstep(far_begin, far_begin + transition, depth) * radius;
++	}
++	return 0.0;
++}
++
++
++float radius_at_depth(float depth) {
++	float radius = 0.0;
++	for (uint i = 0u; i < params.response_count; i++) {
++		radius += endpoint_blur_size(depth, i * 8u) * dof_responses.values[i * 8u + 7u];
++	}
++	return min(abs(radius), params.max_radius);
++}
++
++float world_depth(ivec2 pos) {
++	float depth = texelFetch(scene_depth, pos, 0).r * 2.0 - 1.0;
++	if (params.orthogonal != 0u) {
++		return -(depth * (params.z_far - params.z_near) - (params.z_far + params.z_near)) * 0.5;
++	}
++	return 2.0 * params.z_near * params.z_far / (params.z_far + params.z_near + depth * (params.z_far - params.z_near));
++}
++
++#endif // !DIRECT_COMPOSITE
++
++void main() {
++	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
++	if (any(greaterThanEqual(pos, params.size))) {
++		return;
++	}
++#ifdef DIRECT_COMPOSITE
++	vec4 color = texelFetch(source_color, pos, 0);
++	vec4 background = imageLoad(output_color, pos);
++	imageStore(output_color, pos, vec4(color.rgb + background.rgb * (1.0 - color.a), color.a + background.a * (1.0 - color.a)));
++#else
++	vec4 color = vec4(0.0);
++	vec4 metadata = vec4(0.0);
++	float opaque_depth = world_depth(pos);
++	for (int i = -32; i <= 32; i++) {
++#ifdef HORIZONTAL
++		ivec2 sample_pos = pos + ivec2(i, 0);
++#else
++		ivec2 sample_pos = pos + ivec2(0, i);
++#endif
++		if (any(lessThan(sample_pos, ivec2(0))) || any(greaterThanEqual(sample_pos, params.size))) {
++			continue;
++		}
++		vec4 sample_metadata = texelFetch(source_metadata, sample_pos, 0);
++		if (sample_metadata.a <= 0.0) {
++			continue;
++		}
++		float depth = sample_metadata.r / sample_metadata.a;
++		float radius = radius_at_depth(depth);
++		float extent = radius + 1.0;
++		float taps = ceil(radius);
++		float normalization = extent * (2.0 * taps + 1.0) - taps * (taps + 1.0);
++		float weight = max(0.0, extent - abs(float(i))) / normalization;
++		// A layer pixel may only spread onto pixels where it is visible against
++		// the real opaque world. Preserve the original explicit no_depth_test.
++		float visibility = depth <= opaque_depth + max(0.001, opaque_depth * 0.0001) ? 1.0 : clamp(sample_metadata.g / sample_metadata.a, 0.0, 1.0);
++		weight *= visibility;
++		color += texelFetch(source_color, sample_pos, 0) * weight;
++		metadata += sample_metadata * weight;
++	}
++#ifdef HORIZONTAL
++	imageStore(output_color, pos, color);
++	imageStore(output_metadata, pos, metadata);
++#else
++	// Scene-linear premultiplied over, before exposure/glow/tonemap. The
++	// untouched holes contain only the already blurred native background.
++	float coverage = clamp(color.a, 0.0, 1.0);
++	color.rgb *= color.a > 1.0 ? 1.0 / color.a : 1.0;
++	vec4 background = imageLoad(output_color, pos);
++	imageStore(output_color, pos, vec4(color.rgb + background.rgb * (1.0 - coverage), coverage + background.a * (1.0 - coverage)));
++#endif
++#endif // DIRECT_COMPOSITE
++}

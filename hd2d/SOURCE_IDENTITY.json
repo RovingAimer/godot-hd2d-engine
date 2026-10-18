@@ -1,0 +1,331 @@
+{
+  "status": "source_release_editor_build_and_static_gpu_smoke_verified",
+  "upstream_url": "https://github.com/godotengine/godot.git",
+  "base_commit": "ed1daf0bf001b61586d9930840f2f1394092c079",
+  "base_tag": "4.7.2-stable",
+  "branch": "codex/hd2d-4.7.2",
+  "shallow": false,
+  "origin_configured": true,
+  "clone_mode": "local --no-hardlinks --no-checkout; no alternates; no build cache copied",
+  "object_files_checked": 2,
+  "shared_object_files": [],
+  "licenses": {
+    "LICENSE.txt": {
+      "sha256": "b0435e3b3e4e55238f05f4b306f30524a1b2e20147810d436eaa554fa6855c80",
+      "matches_source": true
+    },
+    "COPYRIGHT.txt": {
+      "sha256": "cb1980c88089573bcacd7221d777c689bb8bbd778799f24c27fca0fe5f774d6d",
+      "matches_source": true
+    },
+    "AUTHORS.md": {
+      "sha256": "6ca51d335b9de108ea53c5621e820c187d98c6faf92e14c8413ddb946b5e56cf",
+      "matches_source": true
+    },
+    "DONORS.md": {
+      "sha256": "8a9a38b5048e5370fe599efad1a1fa640bea9cfefb15295596c4b9926464e3df",
+      "matches_source": true
+    }
+  },
+  "production_patch": {
+    "path": "hd2d/patches/0001-production-P.patch",
+    "sha256": "99e5cb2cc49ac6ec78be5cfca2e822e81ce4849c8fb96992eec2e960697683ae",
+    "applied": true,
+    "files": {
+      "scene/3d/visual_instance_3d.cpp": {
+        "sha256": "cbf0bfa71060a0d53391062512a2780f3ded573edec7e06d8b5d85aee5d17266",
+        "source_sha256": "cbf0bfa71060a0d53391062512a2780f3ded573edec7e06d8b5d85aee5d17266",
+        "normalized_matches_restored_P": true
+      },
+      "scene/3d/visual_instance_3d.h": {
+        "sha256": "7cc0a4c5516dc3e84dfb6e0ce7d3c2d4db918c30f001efdd7c5433ad60773e42",
+        "source_sha256": "7cc0a4c5516dc3e84dfb6e0ce7d3c2d4db918c30f001efdd7c5433ad60773e42",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_geometry_instance.h": {
+        "sha256": "5386d995daa96e6bfd6e116ad65dd412c451a557b56310f1744b18cb6da57929",
+        "source_sha256": "5386d995daa96e6bfd6e116ad65dd412c451a557b56310f1744b18cb6da57929",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_rd/effects/bokeh_dof.cpp": {
+        "sha256": "7a6e4c66aa4e832801b7a24c61ae534239b0d5fdad95161034b712fef02dcad8",
+        "source_sha256": "b549c2d4d102c389fc5aff88f4d613e8af2b6f4dbf85c4f0e6265f6ee8972140",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_rd/effects/bokeh_dof.h": {
+        "sha256": "9fd090f527b3633d4eda687c7ca3b84a353c000e6f7b820046ff0b3a5ca48b1c",
+        "source_sha256": "29ad73e5af31cf06795f60ba73eaa9effc345aa335688c698ec209cb7f08a0da",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp": {
+        "sha256": "92dc5a13413b62ea2945ffd40b0a037e1bde38dba39dcb019e9f1d68e9cffa7f",
+        "source_sha256": "bcf29114afb7b691cbe97fb7578627062536c86be21b01f0139911357d044c14",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h": {
+        "sha256": "7bec6b21ce3cc62df053cf7dadfe9a291a45c2f3fbb872b711c114cb5dd11287",
+        "source_sha256": "7bec6b21ce3cc62df053cf7dadfe9a291a45c2f3fbb872b711c114cb5dd11287",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp": {
+        "sha256": "f005f9cf9e6aa7fbfc08d12a2295b5074668d5744c69c29ae9b9be7161e75e2b",
+        "source_sha256": "f005f9cf9e6aa7fbfc08d12a2295b5074668d5744c69c29ae9b9be7161e75e2b",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h": {
+        "sha256": "1347fddd0e78fbb03b995ec70f6fe3dd147c3e3e74c8ba1e27498312626f23b4",
+        "source_sha256": "1347fddd0e78fbb03b995ec70f6fe3dd147c3e3e74c8ba1e27498312626f23b4",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_rd/renderer_scene_render_rd.cpp": {
+        "sha256": "5ba2c398b15fe6cfdb760733c4171be1ebaa8812d3e720e047424e0ef1b039e2",
+        "source_sha256": "cd614851e4781bd6275fb6e067a09c12e547d100f28bd6938280c20bb6aeebb0",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_rd/renderer_scene_render_rd.h": {
+        "sha256": "15dd1dd107e40b083480a96efe68582fe80639efcefb043304a20496ea5fefb1",
+        "source_sha256": "15dd1dd107e40b083480a96efe68582fe80639efcefb043304a20496ea5fefb1",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_rd/shader_rd.cpp": {
+        "sha256": "7d31e0972f25dc0fc7f9e28e758882ec476c3521bd4316d2dfff9fbd30d3d4a6",
+        "source_sha256": "7d31e0972f25dc0fc7f9e28e758882ec476c3521bd4316d2dfff9fbd30d3d4a6",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_rd/shaders/effects/bokeh_dof.glsl": {
+        "sha256": "2a6595c6d31cb2bc7a20d1fb4c54a37e9d8158e2d5d3d28217ee0213921c01fc",
+        "source_sha256": "ac7e3f00a154e69321d54c85db193b952981fd7bfbcc30bd6b39783512689dba",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_rd/shaders/effects/bokeh_dof_inc.glsl": {
+        "sha256": "3fa38e8e28a66d9a6c0b35d1c0c513eb44424cd8d89780613b9877e9e8b89f9c",
+        "source_sha256": "b75316c17d9da7e4a213b136d44a3eb83a259c0042e6672f123b719caf8f9903",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl": {
+        "sha256": "c37aad98689ec468915c74f25f29894f3432576c2f793e4ca287787cbe9312a7",
+        "source_sha256": "c37aad98689ec468915c74f25f29894f3432576c2f793e4ca287787cbe9312a7",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_scene_cull.cpp": {
+        "sha256": "1eb45ba0c985cfd204f67d2d055569eae0444a1baf23756f5f59ba7b101c27f7",
+        "source_sha256": "1eb45ba0c985cfd204f67d2d055569eae0444a1baf23756f5f59ba7b101c27f7",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_scene_cull.h": {
+        "sha256": "e1d1cf34ef81805003ac126dd87deb376fc13ccd124654f272e286ce03392181",
+        "source_sha256": "e1d1cf34ef81805003ac126dd87deb376fc13ccd124654f272e286ce03392181",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/rendering_method.h": {
+        "sha256": "ca8d35ff6df19cc596082e03e820958561487165f00abaebfa816242522f851a",
+        "source_sha256": "ca8d35ff6df19cc596082e03e820958561487165f00abaebfa816242522f851a",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/rendering_server.cpp": {
+        "sha256": "4e722134cc6a02094329a2ac876b6fe3a69b0242e9ef8e0fc79f0e8cad05370a",
+        "source_sha256": "4e722134cc6a02094329a2ac876b6fe3a69b0242e9ef8e0fc79f0e8cad05370a",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/rendering_server.h": {
+        "sha256": "5b0a16973c04b0fee4b9682d68df2ef6a1456b8a4bb204a41f3a7a7bd363e4f4",
+        "source_sha256": "5b0a16973c04b0fee4b9682d68df2ef6a1456b8a4bb204a41f3a7a7bd363e4f4",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/rendering_server_default.h": {
+        "sha256": "d097237c6d9680d494b67b16f81b8b320cac3530aea33a87dae49b358fb9db2a",
+        "source_sha256": "d097237c6d9680d494b67b16f81b8b320cac3530aea33a87dae49b358fb9db2a",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/storage/camera_attributes_storage.cpp": {
+        "sha256": "ab5707ebc935cb9d634c21c193462dfdbab7d5efef5edd628de1f1af08b15de0",
+        "source_sha256": "0f476508c332f4639c532d2b14346e05bf443201307a5ffca6d27cd734290635",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/storage/camera_attributes_storage.h": {
+        "sha256": "6032064bf0a05f12406b6856679c16acd545e7797e2feebcb72a5f8fe7d8e52a",
+        "source_sha256": "e5dbeaf5b6a40339aca5c5a2fc96738363dc34a73835785bec088d34ad2b66b9",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_rd/effects/world_dof.cpp": {
+        "sha256": "ab19c55f49550cac382fb333d63f6687a1ec57a172f2c84f190385794a18625d",
+        "source_sha256": "ab19c55f49550cac382fb333d63f6687a1ec57a172f2c84f190385794a18625d",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_rd/effects/world_dof.h": {
+        "sha256": "7802e32398e9ee16d9e74d018058a4096f05707944e232e2d2c22764fc1823ef",
+        "source_sha256": "7802e32398e9ee16d9e74d018058a4096f05707944e232e2d2c22764fc1823ef",
+        "normalized_matches_restored_P": true
+      },
+      "servers/rendering/renderer_rd/shaders/effects/world_dof.glsl": {
+        "sha256": "c089b6a49d9980c057c8eeaf53e3e9bad6cac700b6eaa46fc1a8be0d63ac9abe",
+        "source_sha256": "c089b6a49d9980c057c8eeaf53e3e9bad6cac700b6eaa46fc1a8be0d63ac9abe",
+        "normalized_matches_restored_P": true
+      }
+    },
+    "files_record": "Historical imported P snapshot; current accepted source hashes are recorded separately in current_sources."
+  },
+  "acceptance_candidate_patch": {
+    "path": "hd2d/patches/0002-local-support-acceptance.patch",
+    "sha256": "7ddc11b46cf7f8791491400a7e7a9433fcd00f3d68c0adeb7d57f40e5e862196",
+    "applied": true,
+    "apply_check": "passed; full 0001+0002 replay matches all 26 current source files after newline normalization",
+    "source": "artifacts/dof_local_support_20261018/acceptance_source",
+    "source_sha256": {
+      "servers/rendering/renderer_rd/effects/bokeh_dof.cpp": "720e1a408411e881c140eadf9804df5481f75f59c24e6f548513580b7f53e49f",
+      "servers/rendering/renderer_rd/shaders/effects/bokeh_dof.glsl": "868e3f5a12e2a190b179ebbbf1aed53f8240f21b027d533f9a8c1b3ad3280c45"
+    },
+    "note": "Production-cleaned P-to-accepted patch; only bokeh_dof.glsl changes. Original acceptance patch hash and source hashes retain provenance. No algorithm optimization; C++ restored to P; push-constant padding/layout retained.",
+    "original_acceptance_patch_sha256": "f65935197e36e0587d33b6169eaa179ece63eba71b01db5f650d72f9a71a2aa3",
+    "removed_marker": "3",
+    "removed_temporary_env": [
+      "HD2D_DOF_VISUAL_BEFORE",
+      "HD2D_DOF_CLEAR_REJECT",
+      "HD2D_DOF_SUPPORT_COMPENSATION",
+      "HD2D_DOF_VISUAL_COMPARE_VERSION"
+    ],
+    "behavior": "Clear rejection and local visible-FAR support are unconditional in the existing BOX/HEXAGONAL compute path; equivalent to accepted marker3 pad=12. CIRCULAR filter and raster path are unchanged.",
+    "source_note": "Historical framework validation directory; not a required build input and not included in this engine repository. Current source and both replay patches are included."
+  },
+  "production_reference": {
+    "editor_sha256": "a55bc563d6be38e9e235f94fa5d8494f8a167ed55bdd974aa898845760886b10",
+    "editor_console_actual_sha256": "06c6ac0e1a89f87315136ca16dabeffd04c96cdcf4ff5f89f74e20a381f01934",
+    "editor_console_recorded_sha256": "fe8fac0f0898c801a3a93fd81b8d77e020d61cf5706dc0fdb5ee70e330c8d136",
+    "template_debug_sha256": "9f06c9df0dea405c14e44148fec1c47684a97e33c8421eebb0d433b6bd44759f",
+    "template_release_sha256": "4c2729225c92da6d4d7db519dde5909c04403b08fb46ebeed901df2e7a5c5dd4"
+  },
+  "acceptance_reference_editor_sha256": "e9972a305cc0dec8ccf931a5e69b72f02035eac553128909eaebe2910d754afa",
+  "toolchain_reference": {
+    "python": "3.14.8",
+    "scons": "4.9.1",
+    "msvc": "14.3",
+    "windows_sdk": "10.0.26100.0",
+    "platform": "windows",
+    "arch": "x86_64",
+    "mono": false
+  },
+  "checks": "Source logic review and complete ordered patch replay against upstream base; no source-executor build/runtime/GPU/export/commit/push",
+  "repository_url": "https://github.com/RovingAimer/godot-hd2d-engine",
+  "current_sources": {
+    "scene/3d/visual_instance_3d.cpp": {
+      "sha256": "cbf0bfa71060a0d53391062512a2780f3ded573edec7e06d8b5d85aee5d17266",
+      "normalized_sha256": "cbf0bfa71060a0d53391062512a2780f3ded573edec7e06d8b5d85aee5d17266"
+    },
+    "scene/3d/visual_instance_3d.h": {
+      "sha256": "7cc0a4c5516dc3e84dfb6e0ce7d3c2d4db918c30f001efdd7c5433ad60773e42",
+      "normalized_sha256": "7cc0a4c5516dc3e84dfb6e0ce7d3c2d4db918c30f001efdd7c5433ad60773e42"
+    },
+    "servers/rendering/renderer_geometry_instance.h": {
+      "sha256": "5386d995daa96e6bfd6e116ad65dd412c451a557b56310f1744b18cb6da57929",
+      "normalized_sha256": "5386d995daa96e6bfd6e116ad65dd412c451a557b56310f1744b18cb6da57929"
+    },
+    "servers/rendering/renderer_rd/effects/bokeh_dof.cpp": {
+      "sha256": "7a6e4c66aa4e832801b7a24c61ae534239b0d5fdad95161034b712fef02dcad8",
+      "normalized_sha256": "7a6e4c66aa4e832801b7a24c61ae534239b0d5fdad95161034b712fef02dcad8"
+    },
+    "servers/rendering/renderer_rd/effects/bokeh_dof.h": {
+      "sha256": "9fd090f527b3633d4eda687c7ca3b84a353c000e6f7b820046ff0b3a5ca48b1c",
+      "normalized_sha256": "9fd090f527b3633d4eda687c7ca3b84a353c000e6f7b820046ff0b3a5ca48b1c"
+    },
+    "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp": {
+      "sha256": "92dc5a13413b62ea2945ffd40b0a037e1bde38dba39dcb019e9f1d68e9cffa7f",
+      "normalized_sha256": "92dc5a13413b62ea2945ffd40b0a037e1bde38dba39dcb019e9f1d68e9cffa7f"
+    },
+    "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h": {
+      "sha256": "7bec6b21ce3cc62df053cf7dadfe9a291a45c2f3fbb872b711c114cb5dd11287",
+      "normalized_sha256": "7bec6b21ce3cc62df053cf7dadfe9a291a45c2f3fbb872b711c114cb5dd11287"
+    },
+    "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp": {
+      "sha256": "f005f9cf9e6aa7fbfc08d12a2295b5074668d5744c69c29ae9b9be7161e75e2b",
+      "normalized_sha256": "f005f9cf9e6aa7fbfc08d12a2295b5074668d5744c69c29ae9b9be7161e75e2b"
+    },
+    "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h": {
+      "sha256": "1347fddd0e78fbb03b995ec70f6fe3dd147c3e3e74c8ba1e27498312626f23b4",
+      "normalized_sha256": "1347fddd0e78fbb03b995ec70f6fe3dd147c3e3e74c8ba1e27498312626f23b4"
+    },
+    "servers/rendering/renderer_rd/renderer_scene_render_rd.cpp": {
+      "sha256": "5ba2c398b15fe6cfdb760733c4171be1ebaa8812d3e720e047424e0ef1b039e2",
+      "normalized_sha256": "5ba2c398b15fe6cfdb760733c4171be1ebaa8812d3e720e047424e0ef1b039e2"
+    },
+    "servers/rendering/renderer_rd/renderer_scene_render_rd.h": {
+      "sha256": "15dd1dd107e40b083480a96efe68582fe80639efcefb043304a20496ea5fefb1",
+      "normalized_sha256": "15dd1dd107e40b083480a96efe68582fe80639efcefb043304a20496ea5fefb1"
+    },
+    "servers/rendering/renderer_rd/shader_rd.cpp": {
+      "sha256": "7d31e0972f25dc0fc7f9e28e758882ec476c3521bd4316d2dfff9fbd30d3d4a6",
+      "normalized_sha256": "7d31e0972f25dc0fc7f9e28e758882ec476c3521bd4316d2dfff9fbd30d3d4a6"
+    },
+    "servers/rendering/renderer_rd/shaders/effects/bokeh_dof.glsl": {
+      "sha256": "60611d635e9b5a65f4b09e5432f9609f9f40efc866ae06836e1d1763abe1b3cf",
+      "normalized_sha256": "60611d635e9b5a65f4b09e5432f9609f9f40efc866ae06836e1d1763abe1b3cf"
+    },
+    "servers/rendering/renderer_rd/shaders/effects/bokeh_dof_inc.glsl": {
+      "sha256": "3fa38e8e28a66d9a6c0b35d1c0c513eb44424cd8d89780613b9877e9e8b89f9c",
+      "normalized_sha256": "3fa38e8e28a66d9a6c0b35d1c0c513eb44424cd8d89780613b9877e9e8b89f9c"
+    },
+    "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl": {
+      "sha256": "c37aad98689ec468915c74f25f29894f3432576c2f793e4ca287787cbe9312a7",
+      "normalized_sha256": "c37aad98689ec468915c74f25f29894f3432576c2f793e4ca287787cbe9312a7"
+    },
+    "servers/rendering/renderer_scene_cull.cpp": {
+      "sha256": "1eb45ba0c985cfd204f67d2d055569eae0444a1baf23756f5f59ba7b101c27f7",
+      "normalized_sha256": "1eb45ba0c985cfd204f67d2d055569eae0444a1baf23756f5f59ba7b101c27f7"
+    },
+    "servers/rendering/renderer_scene_cull.h": {
+      "sha256": "e1d1cf34ef81805003ac126dd87deb376fc13ccd124654f272e286ce03392181",
+      "normalized_sha256": "e1d1cf34ef81805003ac126dd87deb376fc13ccd124654f272e286ce03392181"
+    },
+    "servers/rendering/rendering_method.h": {
+      "sha256": "ca8d35ff6df19cc596082e03e820958561487165f00abaebfa816242522f851a",
+      "normalized_sha256": "ca8d35ff6df19cc596082e03e820958561487165f00abaebfa816242522f851a"
+    },
+    "servers/rendering/rendering_server.cpp": {
+      "sha256": "4e722134cc6a02094329a2ac876b6fe3a69b0242e9ef8e0fc79f0e8cad05370a",
+      "normalized_sha256": "4e722134cc6a02094329a2ac876b6fe3a69b0242e9ef8e0fc79f0e8cad05370a"
+    },
+    "servers/rendering/rendering_server.h": {
+      "sha256": "5b0a16973c04b0fee4b9682d68df2ef6a1456b8a4bb204a41f3a7a7bd363e4f4",
+      "normalized_sha256": "5b0a16973c04b0fee4b9682d68df2ef6a1456b8a4bb204a41f3a7a7bd363e4f4"
+    },
+    "servers/rendering/rendering_server_default.h": {
+      "sha256": "d097237c6d9680d494b67b16f81b8b320cac3530aea33a87dae49b358fb9db2a",
+      "normalized_sha256": "d097237c6d9680d494b67b16f81b8b320cac3530aea33a87dae49b358fb9db2a"
+    },
+    "servers/rendering/storage/camera_attributes_storage.cpp": {
+      "sha256": "ab5707ebc935cb9d634c21c193462dfdbab7d5efef5edd628de1f1af08b15de0",
+      "normalized_sha256": "ab5707ebc935cb9d634c21c193462dfdbab7d5efef5edd628de1f1af08b15de0"
+    },
+    "servers/rendering/storage/camera_attributes_storage.h": {
+      "sha256": "6032064bf0a05f12406b6856679c16acd545e7797e2feebcb72a5f8fe7d8e52a",
+      "normalized_sha256": "6032064bf0a05f12406b6856679c16acd545e7797e2feebcb72a5f8fe7d8e52a"
+    },
+    "servers/rendering/renderer_rd/effects/world_dof.cpp": {
+      "sha256": "ab19c55f49550cac382fb333d63f6687a1ec57a172f2c84f190385794a18625d",
+      "normalized_sha256": "ab19c55f49550cac382fb333d63f6687a1ec57a172f2c84f190385794a18625d"
+    },
+    "servers/rendering/renderer_rd/effects/world_dof.h": {
+      "sha256": "7802e32398e9ee16d9e74d018058a4096f05707944e232e2d2c22764fc1823ef",
+      "normalized_sha256": "7802e32398e9ee16d9e74d018058a4096f05707944e232e2d2c22764fc1823ef"
+    },
+    "servers/rendering/renderer_rd/shaders/effects/world_dof.glsl": {
+      "sha256": "c089b6a49d9980c057c8eeaf53e3e9bad6cac700b6eaa46fc1a8be0d63ac9abe",
+      "normalized_sha256": "c089b6a49d9980c057c8eeaf53e3e9bad6cac700b6eaa46fc1a8be0d63ac9abe"
+    }
+  },
+  "publication_review": {
+    "removed_comparison_controls": true,
+    "local_absolute_paths_found_in_custom_changes": false,
+    "debug_file_dumps_found_in_custom_changes": false,
+    "retained_profiling_env": "HD2D_DOF_PROFILE=1 only enables optional GPU timestamps; no visual mode change or file output",
+    "algorithm_scope": "Accepted local visible-FAR approximation; no hidden background reconstruction, new textures, buffers or new optimization.",
+    "validation": "Logic review, git diff --check, full two-patch replay and 26-source normalized comparison only; no build, runtime, GPU, export or new visual acceptance by source executor.",
+    "accepted_branch_specialization_check": "Passed against original acceptance_source bokeh_dof.glsl with its recorded SHA256: substituting marker3 pad=12, removing the resulting constant comparison predicates, and ignoring whitespace produces the current GLSL exactly."
+  },
+  "upstream_ancestor_commit_count": 84229,
+  "source_commits": {
+    "production_P": "c51abe811d181725e143d2a70e3966b3cd31db16",
+    "accepted_local_support": "57ef0fd1147006d3668cb6a0fe7060f56fc8dd3f"
+  },
+  "normalization": "UTF-8 source bytes with CRLF replaced by LF; no locale decoding.",
+  "release_validation": "hd2d/BUILD_VALIDATION.json"
+}

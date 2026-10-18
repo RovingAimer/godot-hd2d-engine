@@ -1,3 +1,9 @@
+> **非官方 HD2D 定制 / Unofficial HD2D customization**
+>
+> 本仓库包含 AI 辅助开发的独立 Godot 定制，不隶属于 Godot Foundation 或上游团队，也未获其背书；不会自动向上游创建 Pull Request。详见 [中文说明](hd2d/README.md) / [English](hd2d/README.en.md)。
+>
+> This repository contains an independent Godot customization developed with AI assistance. It is unofficial, unaffiliated with and not endorsed by the Godot Foundation or upstream team, and does not automatically open upstream pull requests. See [中文说明](hd2d/README.md) / [English](hd2d/README.en.md).
+
 # Godot Engine
 
 <p align="center">
