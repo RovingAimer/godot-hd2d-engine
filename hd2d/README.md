@@ -28,7 +28,7 @@ P 的主要接口如下：
 
 这些入口只适用于受支持的材质：dof_exempt 与 WORLD 几何层不支持 depth_draw_always、alpha 预处理/裁剪/覆盖抗锯齿、stencil 或 SSS；WORLD 层还要求普通 MIX 混合与常规深度测试，并且不能使用屏幕纹理、自定义 DEPTH 或折射。
 
-Windows 构建选项不会启用 Forward+。在 Godot 项目中将渲染方法设为 Forward+，并使用本 fork 构建的编辑器和导出模板。请勿将官方版或不同源码版本的模板与此 fork 混用。
+本版本支持使用 Forward+／Vulkan 渲染并导出 Windows x86_64 独立游戏。请在项目设置中选择 Forward+，并配置配套导出模板。Windows x86_64 是编译与导出目标，项目渲染方法单独设置。切换步骤见 [Windows 发布与切换指南](WINDOWS_RELEASE.zh-CN.md)。
 
 ## 构建与导出
 
@@ -42,7 +42,7 @@ scons -j8 platform=windows arch=x86_64 target=template_release accesskit=no d3d1
 
 三个目标必须使用同一源码、补丁和其余 SCons 选项。将生成的匹配编辑器与 debug/release 模板用于编辑和导出；Forward+ 需在项目渲染设置中选择。
 
-本次已在独立目录完成编辑器完整构建，并使用真实街景完成强虚化及前后焦点反转的 Vulkan 运行与静态画面观察；未发现本次整理引入的明显画面回退。构建身份和检查边界见 [BUILD_VALIDATION.json](BUILD_VALIDATION.json)。本次未重新构建导出模板、验证导出游戏、测量性能或进行完整正常速度运镜验收，因此只发布源码，不发布二进制发行包。
+Windows 二进制发布入口为 [4.7.2-hd2d.1](https://github.com/RovingAimer/godot-hd2d-engine/releases/tag/4.7.2-hd2d.1)。编辑器、模板和切换步骤见 [Windows 发布与切换指南](WINDOWS_RELEASE.zh-CN.md)；本次二进制的构建身份、选项、资产校验值及导出运行证据以 Release 随附的 [BUILD_MANIFEST.json](https://github.com/RovingAimer/godot-hd2d-engine/releases/download/4.7.2-hd2d.1/BUILD_MANIFEST.json) 为准。
 
 ## 性能参考
 

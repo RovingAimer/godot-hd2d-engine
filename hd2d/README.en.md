@@ -28,7 +28,7 @@ The feature currently supports the **Forward+** path. Mobile does not implement 
 
 These interfaces apply only to supported materials. dof_exempt and WORLD geometry do not support depth_draw_always, alpha prepass/clip/coverage antialiasing, stencil, or SSS. WORLD geometry additionally requires ordinary MIX blending and standard depth testing, and cannot use screen textures, custom DEPTH, or refraction.
 
-The Windows build options do not enable Forward+ by themselves. Set the rendering method to Forward+ in the Godot project and use an editor and export templates built from this fork. Do not mix these templates with official Godot binaries or binaries from a different source revision.
+This release supports Forward+ / Vulkan rendering and standalone Windows x86_64 game exports. Select Forward+ in the project settings and configure the matching export templates. Windows x86_64 is the compile and export target; the project renderer is selected separately. See the [Windows release and switching guide](WINDOWS_RELEASE.en.md).
 
 ## Build and export
 
@@ -42,7 +42,7 @@ scons -j8 platform=windows arch=x86_64 target=template_release accesskit=no d3d1
 
 Build all three targets from the same source, patches, and remaining SCons options. Use the matching editor and debug/release templates for editing and export; select Forward+ in the project rendering settings.
 
-This publication completed a fresh editor build and Vulkan runtime/static-image checks in the real street scene with strong blur and reversed foreground/background focus. No obvious visual regression from this cleanup was observed. See [BUILD_VALIDATION.json](BUILD_VALIDATION.json) for identity and scope. Export templates, exported games, performance, and full-speed motion were not revalidated in this publication. This is a source publication, with no binary Release.
+The Windows binary release is [4.7.2-hd2d.1](https://github.com/RovingAimer/godot-hd2d-engine/releases/tag/4.7.2-hd2d.1). See the [Windows release and switching guide](WINDOWS_RELEASE.en.md) for the editor, templates, and switching steps. The build identity, options, asset checksums, and export/runtime evidence for this binary release are recorded in the accompanying Release [BUILD_MANIFEST.json](https://github.com/RovingAimer/godot-hd2d-engine/releases/download/4.7.2-hd2d.1/BUILD_MANIFEST.json).
 
 ## Performance reference
 
